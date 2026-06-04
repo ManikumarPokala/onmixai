@@ -16,6 +16,7 @@ services:
       - "${POSTGRES_HOST_PORT:-5440}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-onmixai} -d ${POSTGRES_DB:-onmixai}"]
       interval: 5s
@@ -28,7 +29,8 @@ services:
       dockerfile: Dockerfile
     environment:
       ENV: ${ENV:-dev}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://onmixai:onmixai@postgres:5432/onmixai}
+      # The API connects as the non-superuser runtime role so RLS is enforced.
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://onmixai_app:onmixai_app@postgres:5432/onmixai}
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me-32+chars}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
