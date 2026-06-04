@@ -1,0 +1,12 @@
+{
+  "name": "onmixai-backend",
+  "private": true,
+  "description": "Python/FastAPI service — NOT a Node project. Use make/uv, not npm. npm belongs in ../frontend.",
+  "scripts": {
+    "preinstall": "node -e \"console.error('\\n  backend/ is the Python (FastAPI) service \\u2014 there is no Node package to install here.\\n  Setup:  make install   (from the repo root, creates backend/.venv on Python 3.12)\\n  Run:    make dev        (or: backend/.venv/bin/uvicorn src.main:create_app --factory --reload)\\n  npm/pnpm/yarn commands belong in ../frontend.\\n'); process.exit(1)\"",
+    "dev": "node -e \"console.error('\\n  Use the Python toolchain for the backend: run  make dev  from the repo root.\\n  (npm run dev belongs in ../frontend.)\\n'); process.exit(1)\"",
+    "build": "node -e \"console.error('\\n  The backend is Python \\u2014 there is no Node build. Use make/uv. npm belongs in ../frontend.\\n'); process.exit(1)\"",
+    "start": "node -e \"console.error('\\n  Start the backend with  make dev  (uvicorn). npm belongs in ../frontend.\\n'); process.exit(1)\"",
+    "test": "node -e \"console.error('\\n  Backend tests:  make test  (pytest). npm belongs in ../frontend.\\n'); process.exit(1)\""
+  }
+}

@@ -24,6 +24,8 @@ htmlcov/
 node_modules/
 frontend/dist/
 frontend/.vite/
+# backend/ is Python; its package.json is only a guard — never commit a lockfile there
+backend/package-lock.json
 
 # Editor / OS
 .DS_Store
