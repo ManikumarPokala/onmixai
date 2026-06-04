@@ -1,0 +1,38 @@
+# Local development stack: Postgres + the OnMixAI API.
+# Secrets use clearly-marked dev defaults via ${VAR:-default} substitution so the
+# stack boots out of the box; real deployments inject real values from the
+# environment. No production secret is ever committed here.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-onmixai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onmixai}
+      POSTGRES_DB: ${POSTGRES_DB:-onmixai}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-onmixai} -d ${POSTGRES_DB:-onmixai}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    environment:
+      ENV: ${ENV:-dev}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://onmixai:onmixai@postgres:5432/onmixai}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me-32+chars}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

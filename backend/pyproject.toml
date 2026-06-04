@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "onmixai-backend"
+version = "0.1.0"
+description = "OnMixAI backend — enterprise AI decision intelligence platform"
+requires-python = "==3.12.*"
+dependencies = [
+    "fastapi==0.136.3",
+    "uvicorn[standard]==0.49.0",
+    "sqlalchemy[asyncio]==2.0.50",
+    "asyncpg==0.31.0",
+    "alembic==1.18.4",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.1",
+    "structlog==25.5.0",
+    "pyjwt==2.13.0",
+    "argon2-cffi==25.1.0",
+    "python-multipart==0.0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.0.3",
+    "pytest-asyncio==1.4.0",
+    "pytest-cov==7.1.0",
+    "httpx==0.28.1",
+    "testcontainers[postgres]==4.14.2",
+    "ruff==0.15.15",
+    "mypy==2.1.0",
+    "import-linter==2.11",
+    "pip-audit==2.10.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "C901", "T201"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "."
+explicit_package_bases = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
