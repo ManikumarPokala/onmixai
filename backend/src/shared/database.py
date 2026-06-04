@@ -11,10 +11,11 @@ accessors) so importing this module never requires configuration to be present;
 configuration is only read the first time a connection is actually needed.
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from functools import lru_cache
 from uuid import UUID
 
+import structlog
 from sqlalchemy import MetaData, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -37,6 +38,19 @@ NAMING_CONVENTION = {
 
 # Name of the Postgres session variable RLS policies filter on (see migration 0001).
 TENANT_GUC = "app.current_org_id"
+_AFTER_COMMIT_KEY = "after_commit_callbacks"
+
+_logger = structlog.get_logger()
+
+
+def register_after_commit(session: AsyncSession, callback: Callable[[], Awaitable[None]]) -> None:
+    """Register a coroutine to run after this request's transaction commits.
+
+    Used to enqueue jobs only once the row they reference is durably committed
+    (avoids a worker racing an uncommitted document).
+    """
+    callbacks: list[Callable[[], Awaitable[None]]] = session.info.setdefault(_AFTER_COMMIT_KEY, [])
+    callbacks.append(callback)
 
 
 class Base(DeclarativeBase):
@@ -100,6 +114,19 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
         except Exception:
             await session.rollback()
             raise
+        await run_after_commit(session)
+
+
+async def run_after_commit(session: AsyncSession) -> None:
+    """Run (and consume) post-commit callbacks.
+
+    A callback failure is logged, never failing the already-committed request.
+    """
+    for callback in session.info.pop(_AFTER_COMMIT_KEY, []):
+        try:
+            await callback()
+        except Exception:
+            _logger.exception("after_commit_callback_failed")
 
 
 async def dispose_engine() -> None:

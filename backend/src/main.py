@@ -10,12 +10,14 @@ from fastapi import FastAPI
 from slowapi.errors import RateLimitExceeded
 
 from src.identity.router import router as identity_router
+from src.knowledge.router import router as knowledge_router
 from src.shared.config import get_settings
 from src.shared.database import dispose_engine
 from src.shared.errors import register_exception_handlers
 from src.shared.health import router as health_router
 from src.shared.logging import configure_logging
 from src.shared.middleware import RequestContextMiddleware
+from src.shared.queue import get_job_queue
 from src.shared.ratelimit import limiter, rate_limit_exceeded_handler
 from src.shared.storage import get_object_storage
 
@@ -26,6 +28,7 @@ API_PREFIX = "/api/v1"
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await get_object_storage().ensure_bucket()
     yield
+    await get_job_queue().close()
     await dispose_engine()
 
 
@@ -42,5 +45,6 @@ def create_app() -> FastAPI:
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
     app.include_router(identity_router, prefix=API_PREFIX)
+    app.include_router(knowledge_router, prefix=API_PREFIX)
     app.include_router(health_router)
     return app

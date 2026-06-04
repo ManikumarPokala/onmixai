@@ -61,6 +61,8 @@ extend-immutable-calls = [
     "fastapi.Query",
     "fastapi.Path",
     "fastapi.Header",
+    "fastapi.File",
+    "fastapi.Form",
     "fastapi.security.HTTPBearer",
 ]
 
@@ -87,24 +89,23 @@ ignore_missing_imports = true
 root_package = "src"
 
 [[tool.importlinter.contracts]]
-# shared is cross-cutting and must not depend on any domain (CLAUDE.md §3.3).
-name = "shared imports no domain"
-type = "forbidden"
-source_modules = ["src.shared"]
-forbidden_modules = ["src.identity", "src.knowledge"]
+# Dependency stack (CLAUDE.md §3.3): main may import anything; knowledge may
+# import identity (auth) + shared; identity may import shared; shared imports no
+# domain. Reverse imports (e.g. identity -> knowledge) are forbidden.
+name = "Layered architecture: main > knowledge > identity > shared"
+type = "layers"
+layers = ["src.main", "src.knowledge", "src.identity", "src.shared"]
 
 [[tool.importlinter.contracts]]
-# Domains must not import the composition root.
-name = "domains do not import the composition root"
+# Cross-domain access is via the other domain's interface (service/dependencies/
+# schemas), never its repository or models (CLAUDE.md §3.3).
+name = "knowledge uses identity's interface, not its internals"
 type = "forbidden"
-source_modules = ["src.identity", "src.knowledge"]
-forbidden_modules = ["src.main"]
-
-[[tool.importlinter.contracts]]
-# Domains are independent — they communicate only via service interfaces.
-name = "domains are independent"
-type = "independence"
-modules = ["src.identity", "src.knowledge"]
+source_modules = ["src.knowledge"]
+forbidden_modules = ["src.identity.repository", "src.identity.models"]
+# Only DIRECT imports are forbidden: knowledge may import identity's interface
+# (dependencies/schemas), which legitimately uses identity's repository internally.
+allow_indirect_imports = "true"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

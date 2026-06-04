@@ -14,6 +14,11 @@ class DocumentNotFoundError(AppError):
         super().__init__("DOCUMENT_NOT_FOUND", 404, "Document not found", detail)
 
 
+class CollectionNameTakenError(AppError):
+    def __init__(self, *, detail: str | None = None) -> None:
+        super().__init__("COLLECTION_NAME_TAKEN", 409, "Collection name already in use", detail)
+
+
 class DocumentQuotaExceededError(AppError):
     def __init__(self, *, detail: str | None = None) -> None:
         super().__init__("DOCUMENT_QUOTA_EXCEEDED", 409, "Document quota exceeded", detail)
