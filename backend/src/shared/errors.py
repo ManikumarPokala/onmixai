@@ -85,9 +85,12 @@ def _json_error(status: int, body: dict[str, Any], request_id: str | None) -> JS
     return response
 
 
-async def _handle_app_error(request: Request, exc: Exception) -> JSONResponse:
-    """Render a typed domain error. Registered only for ``AppError``."""
-    error = cast(AppError, exc)
+async def render_app_error(request: Request, error: AppError) -> JSONResponse:
+    """Render a typed domain error into the standard envelope (+ logging).
+
+    Public so other layers (e.g. the rate-limit adapter) can reuse the exact
+    rendering instead of building a parallel response.
+    """
     request_id = _request_id(request)
     event = "app_error"
     if error.status >= 500:
@@ -95,6 +98,11 @@ async def _handle_app_error(request: Request, exc: Exception) -> JSONResponse:
     else:
         _logger.info(event, code=error.code, status=error.status, detail=error.detail)
     return _json_error(error.status, _envelope(error.code, error.message, request_id), request_id)
+
+
+async def _handle_app_error(request: Request, exc: Exception) -> JSONResponse:
+    """AppError exception handler. Registered only for ``AppError``."""
+    return await render_app_error(request, cast(AppError, exc))
 
 
 async def _handle_validation_error(request: Request, exc: Exception) -> JSONResponse:

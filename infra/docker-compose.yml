@@ -33,8 +33,9 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://onmixai_app:onmixai_app@postgres:5432/onmixai}
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me-32+chars}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    # Host port defaults to 8008 (8000 is commonly occupied); container stays 8000.
     ports:
-      - "8000:8000"
+      - "${API_HOST_PORT:-8008}:8000"
     depends_on:
       postgres:
         condition: service_healthy

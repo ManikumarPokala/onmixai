@@ -19,6 +19,7 @@ dependencies = [
     "pyjwt==2.13.0",
     "argon2-cffi==25.1.0",
     "python-multipart==0.0.30",
+    "slowapi==0.1.9",
 ]
 
 [project.optional-dependencies]
@@ -67,8 +68,8 @@ mypy_path = "."
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-# testcontainers ships no type information.
-module = ["testcontainers.*"]
+# These dependencies ship no type information.
+module = ["testcontainers.*", "slowapi.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -31,6 +31,10 @@ class OrganizationRepository:
         stmt = select(Organization).where(Organization.slug == slug)
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
+    async def get_by_id(self, org_id: UUID) -> Organization | None:
+        stmt = select(Organization).where(Organization.id == org_id)
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
 
 class UserRepository:
     def __init__(self, session: AsyncSession) -> None:

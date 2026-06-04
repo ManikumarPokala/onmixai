@@ -22,10 +22,16 @@ from src.identity.rules import (
     is_refresh_token_expired,
     is_refresh_token_reused,
 )
-from src.identity.schemas import IssuedTokens, OrganizationDTO, RegistrationResult, UserDTO
+from src.identity.schemas import (
+    AuthContext,
+    IssuedTokens,
+    OrganizationDTO,
+    RegistrationResult,
+    UserDTO,
+)
 from src.shared.config import Settings
 from src.shared.database import set_tenant_context
-from src.shared.errors import AuthenticationError, ConflictError
+from src.shared.errors import AuthenticationError, ConflictError, NotFoundError
 from src.shared.security import (
     create_access_token,
     generate_refresh_token,
@@ -141,6 +147,20 @@ class AuthService:
         token = await self._refresh.get_by_hash(org.id, hash_refresh_token(raw_token))
         if token is not None and token.revoked_at is None:
             await self._refresh.revoke(org.id, token.id, datetime.now(UTC))
+
+    async def get_user(self, actor: AuthContext) -> UserDTO:
+        """Return the authenticated user's profile (tenant context already bound)."""
+        user = await self._users.get_by_id(actor.org_id, actor.user_id)
+        if user is None:
+            raise AuthenticationError("INVALID_TOKEN")
+        return UserDTO.from_model(user)
+
+    async def get_organization(self, actor: AuthContext) -> OrganizationDTO:
+        """Return the authenticated user's organization."""
+        org = await self._orgs.get_by_id(actor.org_id)
+        if org is None:
+            raise NotFoundError("ORGANIZATION_NOT_FOUND")
+        return OrganizationDTO.from_model(org)
 
     async def _issue_tokens(self, user: User) -> IssuedTokens:
         """Mint an access JWT and a freshly-stored rotating refresh token."""
