@@ -86,6 +86,12 @@ def settings(pg_container: dict[str, str]) -> Settings:
         env="test",
         database_url=pg_container["app_url"],
         jwt_secret="test-secret-key-at-least-32-characters-long",
+        storage_endpoint="http://localhost:9100",
+        storage_access_key="access",
+        storage_secret_key="secret",
+        storage_bucket="onmixai-test",
+        redis_url="redis://localhost:6390/0",
+        embedding_dimension=8,
         _env_file=None,
     )
 

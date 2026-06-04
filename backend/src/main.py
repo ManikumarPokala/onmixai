@@ -17,12 +17,14 @@ from src.shared.health import router as health_router
 from src.shared.logging import configure_logging
 from src.shared.middleware import RequestContextMiddleware
 from src.shared.ratelimit import limiter, rate_limit_exceeded_handler
+from src.shared.storage import get_object_storage
 
 API_PREFIX = "/api/v1"
 
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    await get_object_storage().ensure_bucket()
     yield
     await dispose_engine()
 

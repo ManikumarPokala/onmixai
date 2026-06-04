@@ -20,6 +20,9 @@ dependencies = [
     "argon2-cffi==25.1.0",
     "python-multipart==0.0.30",
     "slowapi==0.1.9",
+    "aioboto3==15.5.0",
+    "arq==0.28.0",
+    "redis==5.3.1",
 ]
 
 [project.optional-dependencies]
@@ -68,8 +71,8 @@ mypy_path = "."
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-# These dependencies ship no type information.
-module = ["testcontainers.*", "slowapi.*"]
+# These dependencies ship no (complete) type information.
+module = ["testcontainers.*", "slowapi.*", "aioboto3.*", "aiobotocore.*", "botocore.*"]
 ignore_missing_imports = true
 
 [tool.importlinter]

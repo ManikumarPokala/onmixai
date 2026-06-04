@@ -70,6 +70,12 @@ jobs:
       ENV: test
       DATABASE_URL: postgresql+asyncpg://onmixai_app:onmixai_app@localhost:5432/onmixai
       JWT_SECRET: test-secret-key-at-least-32-characters-long
+      STORAGE_ENDPOINT: http://localhost:9000
+      STORAGE_ACCESS_KEY: access
+      STORAGE_SECRET_KEY: secret
+      STORAGE_BUCKET: onmixai-test
+      REDIS_URL: redis://localhost:6379/0
+      EMBEDDING_DIMENSION: "8"
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: astral-sh/setup-uv@v5.4.2
@@ -88,6 +94,12 @@ jobs:
       ENV: test
       DATABASE_URL: postgresql+asyncpg://onmixai_app:onmixai_app@localhost:5432/onmixai
       JWT_SECRET: test-secret-key-at-least-32-characters-long
+      STORAGE_ENDPOINT: http://localhost:9000
+      STORAGE_ACCESS_KEY: access
+      STORAGE_SECRET_KEY: secret
+      STORAGE_BUCKET: onmixai-test
+      REDIS_URL: redis://localhost:6379/0
+      EMBEDDING_DIMENSION: "8"
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: astral-sh/setup-uv@v5.4.2

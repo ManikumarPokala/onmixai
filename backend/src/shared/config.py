@@ -54,6 +54,21 @@ class Settings(BaseSettings):
     db_max_overflow: int = 5
     db_pool_timeout_seconds: int = 30
 
+    # Object storage (S3-compatible) and ingestion queue.
+    storage_endpoint: str
+    storage_access_key: SecretStr
+    storage_secret_key: SecretStr
+    storage_bucket: str
+    redis_url: str
+
+    # Ingestion limits and tuning.
+    max_upload_bytes: int = 52_428_800
+    max_document_pages: int = 2000
+    embedding_dimension: int
+    embedding_batch_size: int = 100
+    ingest_max_attempts: int = 3
+    ingest_stuck_after_seconds: int = 1800
+
     @field_validator("jwt_secret")
     @classmethod
     def _jwt_secret_long_enough(cls, value: SecretStr) -> SecretStr:
