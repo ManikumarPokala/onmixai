@@ -9,8 +9,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-onmixai}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onmixai}
       POSTGRES_DB: ${POSTGRES_DB:-onmixai}
+    # Host port defaults to 5440 to avoid colliding with a native Postgres on
+    # 5432; the container-internal port stays 5432 (the api service connects via
+    # the compose network at postgres:5432). Override with POSTGRES_HOST_PORT.
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5440}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
