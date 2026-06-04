@@ -56,6 +56,7 @@ def create_access_token(*, settings: Settings, user_id: UUID, org_id: UUID, role
     Time/Space: O(1).
     """
     now = datetime.now(UTC)
+    # Any: JWT claim values are heterogeneous (str, datetime, int) by design.
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "org_id": str(org_id),
@@ -73,7 +74,8 @@ def decode_access_token(token: str, *, settings: Settings) -> dict[str, Any]:
     """Verify signature + expiry (no leeway) and return the claims.
 
     Raises ``jwt.PyJWTError`` subclasses on any failure; callers map these to
-    ``AuthenticationError``. Time/Space: O(1).
+    ``AuthenticationError``. Time/Space: O(1). Returns heterogeneous JWT claims
+    (hence ``Any`` values); the caller validates/narrows the fields it needs.
     """
     return jwt.decode(
         token,

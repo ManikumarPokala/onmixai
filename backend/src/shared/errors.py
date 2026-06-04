@@ -74,6 +74,8 @@ def _request_id(request: Request) -> str | None:
     return cast(str | None, getattr(request.state, "request_id", None))
 
 
+# Any: error envelope bodies are heterogeneous JSON (string fields plus, for
+# validation errors, a nested list of field errors) serialized straight to the client.
 def _envelope(code: str, message: str, request_id: str | None) -> dict[str, Any]:
     return {"error": {"code": code, "message": message, "request_id": request_id}}
 

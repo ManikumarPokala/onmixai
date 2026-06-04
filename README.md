@@ -35,18 +35,44 @@ onmixai/
 # Backend deps (creates backend/.venv on Python 3.12)
 make install
 
-# Local Postgres
+# Backend config: copy the template and adjust if needed
+cp backend/.env.example backend/.env
+
+# Local Postgres (provisions the runtime role + migrates via the init script)
 docker compose -f infra/docker-compose.yml up -d postgres
+make migrate
 
 # Quality gate (lint + typecheck + tests)
 make verify
 
-# Run the API with autoreload
-make dev
+# Run the full stack (API + Postgres)
+docker compose -f infra/docker-compose.yml up -d --build
 ```
 
 The backend reads configuration from `backend/.env`
 (copy [`backend/.env.example`](backend/.env.example) and fill in values).
+
+### Local ports (non-default by design)
+
+To avoid colliding with common local services, the dev stack publishes on
+non-standard host ports (override with the env vars in parentheses):
+
+| Service | Host port | Container port | Override |
+|---|---|---|---|
+| Postgres | **5440** | 5432 | `POSTGRES_HOST_PORT` |
+| API | **8008** | 8000 | `API_HOST_PORT` |
+
+So health checks are `curl localhost:8008/health` and the DB DSN uses
+`localhost:5440`. Inside the compose network the API still reaches Postgres at
+`postgres:5432`.
+
+### Database roles
+
+The app connects as the non-superuser, non-bypassrls runtime role
+(`onmixai_app`) so Row-Level Security is always enforced; Alembic migrations run
+as the owner role via `MIGRATION_DATABASE_URL`. See
+[ADR 0005](docs/adr/0005-toolchain-and-db-roles.md) and
+[ADR 0003](docs/adr/0003-tenancy-rls.md).
 
 ## Make targets
 
