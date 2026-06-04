@@ -1,0 +1,13 @@
+# gitleaks configuration — extends the default ruleset and allowlists the two
+# clearly-fake, documented placeholder secrets used in tests and local dev. These
+# are never real credentials (the dev value is also in DENYLISTED_SECRETS so it
+# cannot be used when ENV=prod). Everything else is still scanned.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known non-secret placeholders (test fixtures + documented dev defaults)"
+regexes = [
+  '''test-secret-key-at-least-32-characters-long''',
+  '''dev-only-insecure-secret-change-me-32\+chars''',
+]

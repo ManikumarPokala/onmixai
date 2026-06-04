@@ -72,6 +72,16 @@ explicit_package_bases = true
 module = ["testcontainers.*", "slowapi.*"]
 ignore_missing_imports = true
 
+[tool.importlinter]
+root_package = "src"
+
+[[tool.importlinter.contracts]]
+# main (composition root) may import domains; domains may import shared;
+# shared must import no domain. Enforces CLAUDE.md §3.3 dependency direction.
+name = "Layered architecture: main > domains > shared"
+type = "layers"
+layers = ["src.main", "src.identity", "src.shared"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

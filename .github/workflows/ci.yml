@@ -1,0 +1,174 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.11.19"
+  PYTHON_VERSION: "3.12"
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: astral-sh/setup-uv@v5.4.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv venv --python ${{ env.PYTHON_VERSION }} .venv
+      - run: uv pip install --python .venv -e ".[dev]"
+      - run: .venv/bin/ruff check .
+      - run: .venv/bin/ruff format --check .
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: astral-sh/setup-uv@v5.4.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv venv --python ${{ env.PYTHON_VERSION }} .venv
+      - run: uv pip install --python .venv -e ".[dev]"
+      - run: .venv/bin/mypy src/ tests/
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: astral-sh/setup-uv@v5.4.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv venv --python ${{ env.PYTHON_VERSION }} .venv
+      - run: uv pip install --python .venv -e ".[dev]"
+      - run: .venv/bin/lint-imports
+
+  test:
+    # Integration tests use testcontainers (Docker is available on the runner),
+    # which provisions the non-superuser runtime role and runs migrations exactly
+    # as in local dev — so role separation and RLS are reproduced faithfully.
+    runs-on: ubuntu-latest
+    # create_app() reads config at construction; the real DB is the testcontainer
+    # (injected via dependency override), so DATABASE_URL here is only a placeholder.
+    env:
+      ENV: test
+      DATABASE_URL: postgresql+asyncpg://onmixai_app:onmixai_app@localhost:5432/onmixai
+      JWT_SECRET: test-secret-key-at-least-32-characters-long
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: astral-sh/setup-uv@v5.4.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv venv --python ${{ env.PYTHON_VERSION }} .venv
+      - run: uv pip install --python .venv -e ".[dev]"
+      - run: .venv/bin/pytest --cov=src --cov-fail-under=80 -q
+
+  isolation:
+    # Separate, permanently-blocking job. Runs as the non-bypassrls runtime role
+    # (via testcontainers) — never a superuser, or it would prove nothing.
+    runs-on: ubuntu-latest
+    env:
+      ENV: test
+      DATABASE_URL: postgresql+asyncpg://onmixai_app:onmixai_app@localhost:5432/onmixai
+      JWT_SECRET: test-secret-key-at-least-32-characters-long
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: astral-sh/setup-uv@v5.4.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv venv --python ${{ env.PYTHON_VERSION }} .venv
+      - run: uv pip install --python .venv -e ".[dev]"
+      - run: .venv/bin/pytest tests/isolation/ -q
+
+  migrations:
+    # Reversibility on a clean DB. Migrations run as the owner role; this proves
+    # upgrade -> downgrade -> upgrade is clean.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: onmixai
+          POSTGRES_PASSWORD: onmixai
+          POSTGRES_DB: onmixai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U onmixai -d onmixai"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      MIGRATION_DATABASE_URL: postgresql+asyncpg://onmixai:onmixai@localhost:5432/onmixai
+      DATABASE_URL: postgresql+asyncpg://onmixai:onmixai@localhost:5432/onmixai
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: astral-sh/setup-uv@v5.4.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv venv --python ${{ env.PYTHON_VERSION }} .venv
+      - run: uv pip install --python .venv -e ".[dev]"
+      - run: .venv/bin/alembic upgrade head
+      - run: .venv/bin/alembic downgrade base
+      - run: .venv/bin/alembic upgrade head
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm run build
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - name: gitleaks (secret scan, full history)
+        uses: gitleaks/gitleaks-action@v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: astral-sh/setup-uv@v5.4.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv venv --python ${{ env.PYTHON_VERSION }} .venv
+      - run: uv pip install --python .venv -e ".[dev]"
+      - name: pip-audit (fail on high+)
+        run: .venv/bin/pip-audit
+      - name: npm audit (fail on high+)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  # NOTE: the hot-path benchmark gate (CLAUDE.md §8 / performance.md §2) is
+  # intentionally absent this sprint — no hot paths exist yet (search, context
+  # assembly, metering arrive in Phase 2+). It activates as a blocking job when
+  # tests/benchmarks/ is populated, rather than shipping an empty placeholder.
