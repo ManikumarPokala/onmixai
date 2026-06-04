@@ -28,6 +28,7 @@ dev = [
     "pytest-cov==7.1.0",
     "httpx==0.28.1",
     "testcontainers[postgres]==4.14.2",
+    "psycopg[binary]==3.3.4",
     "ruff==0.15.15",
     "mypy==2.1.0",
     "import-linter==2.11",
@@ -48,12 +49,27 @@ select = ["E", "F", "I", "N", "UP", "B", "C901", "T201"]
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection markers are used as argument defaults by design.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Header",
+    "fastapi.security.HTTPBearer",
+]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 mypy_path = "."
 explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+# testcontainers ships no type information.
+module = ["testcontainers.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
