@@ -116,7 +116,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: onmixai
           POSTGRES_PASSWORD: onmixai
@@ -129,6 +129,7 @@ jobs:
     env:
       MIGRATION_DATABASE_URL: postgresql+asyncpg://onmixai:onmixai@localhost:5432/onmixai
       DATABASE_URL: postgresql+asyncpg://onmixai:onmixai@localhost:5432/onmixai
+      EMBEDDING_DIMENSION: "8"
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: astral-sh/setup-uv@v5.4.2

@@ -105,3 +105,21 @@ def get_settings() -> Settings:
     into business logic.
     """
     return Settings()
+
+
+class _DimensionSettings(BaseSettings):
+    """Reads only EMBEDDING_DIMENSION (the single source of truth for the vector
+    column width) so ORM models and migrations can size the column without
+    requiring the full Settings (storage/JWT/etc.) to be present."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
+    )
+
+    embedding_dimension: int
+
+
+@lru_cache
+def get_embedding_dimension() -> int:
+    """Configured embedding/vector dimension; used by models and migration 0002."""
+    return _DimensionSettings().embedding_dimension

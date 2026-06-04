@@ -14,9 +14,11 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -42,6 +44,7 @@ class Organization(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(255))
     slug: Mapped[str] = mapped_column(String(255), unique=True)
+    max_documents: Mapped[int] = mapped_column(Integer, server_default=text("500"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

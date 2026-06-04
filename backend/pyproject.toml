@@ -23,6 +23,7 @@ dependencies = [
     "aioboto3==15.5.0",
     "arq==0.28.0",
     "redis==5.3.1",
+    "pgvector==0.4.2",
 ]
 
 [project.optional-dependencies]
@@ -72,18 +73,38 @@ explicit_package_bases = true
 
 [[tool.mypy.overrides]]
 # These dependencies ship no (complete) type information.
-module = ["testcontainers.*", "slowapi.*", "aioboto3.*", "aiobotocore.*", "botocore.*"]
+module = [
+    "testcontainers.*",
+    "slowapi.*",
+    "aioboto3.*",
+    "aiobotocore.*",
+    "botocore.*",
+    "pgvector.*",
+]
 ignore_missing_imports = true
 
 [tool.importlinter]
 root_package = "src"
 
 [[tool.importlinter.contracts]]
-# main (composition root) may import domains; domains may import shared;
-# shared must import no domain. Enforces CLAUDE.md §3.3 dependency direction.
-name = "Layered architecture: main > domains > shared"
-type = "layers"
-layers = ["src.main", "src.identity", "src.shared"]
+# shared is cross-cutting and must not depend on any domain (CLAUDE.md §3.3).
+name = "shared imports no domain"
+type = "forbidden"
+source_modules = ["src.shared"]
+forbidden_modules = ["src.identity", "src.knowledge"]
+
+[[tool.importlinter.contracts]]
+# Domains must not import the composition root.
+name = "domains do not import the composition root"
+type = "forbidden"
+source_modules = ["src.identity", "src.knowledge"]
+forbidden_modules = ["src.main"]
+
+[[tool.importlinter.contracts]]
+# Domains are independent — they communicate only via service interfaces.
+name = "domains are independent"
+type = "independence"
+modules = ["src.identity", "src.knowledge"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

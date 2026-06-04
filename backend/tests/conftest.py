@@ -29,7 +29,7 @@ from src.identity.repository import (
     UserRepository,
 )
 from src.identity.service import AuthService
-from src.shared.config import Settings
+from src.shared.config import Settings, get_embedding_dimension
 
 BACKEND = Path(__file__).resolve().parents[1]
 
@@ -69,7 +69,11 @@ def _run_migrations(owner_url: str, app_url: str) -> None:
 @pytest.fixture(scope="session")
 def pg_container() -> Iterator[dict[str, str]]:
     with PostgresContainer(
-        "postgres:16", username=_OWNER, password=_OWNER_PW, dbname=_DB, driver="psycopg"
+        "pgvector/pgvector:pg16",
+        username=_OWNER,
+        password=_OWNER_PW,
+        dbname=_DB,
+        driver="psycopg",
     ) as pg:
         host = pg.get_container_host_ip()
         port = int(pg.get_exposed_port(5432))
@@ -91,7 +95,7 @@ def settings(pg_container: dict[str, str]) -> Settings:
         storage_secret_key="secret",
         storage_bucket="onmixai-test",
         redis_url="redis://localhost:6390/0",
-        embedding_dimension=8,
+        embedding_dimension=get_embedding_dimension(),
         _env_file=None,
     )
 
