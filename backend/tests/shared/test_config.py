@@ -10,6 +10,7 @@ from src.shared.config import (
     DENYLISTED_SECRETS,
     Settings,
     get_embedding_dimension,
+    get_index_params,
     get_settings,
 )
 
@@ -108,6 +109,46 @@ def test_embedding_dimension_single_source(monkeypatch: pytest.MonkeyPatch) -> N
     assert get_embedding_dimension() == get_settings().embedding_dimension == 321
     get_settings.cache_clear()
     get_embedding_dimension.cache_clear()
+
+
+def test_search_tuning_knobs_present_and_typed() -> None:
+    settings = _build(env="dev", database_url=VALID_DSN, jwt_secret=STRONG_SECRET)
+    assert settings.search_hnsw_m == 16
+    assert settings.search_hnsw_ef_construction == 64
+    assert settings.search_ef_search == 40
+    assert settings.search_top_k == 60
+    assert settings.search_rrf_k == 60
+    assert settings.search_fts_language == "english"
+    assert settings.search_max_results == 50
+
+
+def test_index_params_single_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    # get_index_params() (read by migration 0004 + the chunks model) and Settings
+    # must never drift — the HNSW/GIN index build params hang off these values.
+    for key, value in {
+        "ENV": "test",
+        "DATABASE_URL": VALID_DSN,
+        "JWT_SECRET": STRONG_SECRET,
+        "STORAGE_ENDPOINT": "http://localhost:9000",
+        "STORAGE_ACCESS_KEY": "access",
+        "STORAGE_SECRET_KEY": "secret",
+        "STORAGE_BUCKET": "bucket",
+        "REDIS_URL": "redis://localhost:6379/0",
+        "EMBEDDING_DIMENSION": "8",
+        "SEARCH_HNSW_M": "24",
+        "SEARCH_HNSW_EF_CONSTRUCTION": "100",
+        "SEARCH_FTS_LANGUAGE": "simple",
+    }.items():
+        monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
+    get_index_params.cache_clear()
+    params = get_index_params()
+    settings = get_settings()
+    assert params.hnsw_m == settings.search_hnsw_m == 24
+    assert params.hnsw_ef_construction == settings.search_hnsw_ef_construction == 100
+    assert params.fts_language == settings.search_fts_language == "simple"
+    get_settings.cache_clear()
+    get_index_params.cache_clear()
 
 
 def test_get_settings_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:

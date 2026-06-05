@@ -8,6 +8,7 @@ via FastAPI dependencies, never imported as a module-level singleton in business
 code.
 """
 
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Literal
 
@@ -85,6 +86,17 @@ class Settings(BaseSettings):
     # an artificial pause inside ingestion so a kill/sweep drill can land mid-task.
     ingest_chaos_delay_seconds: float = 0.0
 
+    # Search / retrieval (Phase 2). The single source of truth for HNSW + FTS index
+    # build params (read by migration 0004 via get_index_params) and the runtime
+    # retrieval knobs. No magic numbers elsewhere (CLAUDE.md §3.8, §7).
+    search_hnsw_m: int = 16
+    search_hnsw_ef_construction: int = 64
+    search_ef_search: int = 40  # runtime HNSW probe; final default chosen in Task 7
+    search_top_k: int = 60  # candidates fetched per arm before fusion
+    search_rrf_k: int = 60  # reciprocal-rank-fusion constant
+    search_fts_language: str = "english"  # Postgres text-search config
+    search_max_results: int = 50  # hard server-side page cap
+
     @field_validator("jwt_secret")
     @classmethod
     def _jwt_secret_long_enough(cls, value: SecretStr) -> SecretStr:
@@ -153,3 +165,37 @@ class _DimensionSettings(BaseSettings):
 def get_embedding_dimension() -> int:
     """Configured embedding/vector dimension; used by models and migration 0002."""
     return _DimensionSettings().embedding_dimension
+
+
+@dataclass(frozen=True, slots=True)
+class IndexParams:
+    """Build-time index parameters shared by the ORM model and migration 0004."""
+
+    hnsw_m: int
+    hnsw_ef_construction: int
+    fts_language: str
+
+
+class _IndexParamSettings(BaseSettings):
+    """Reads only the index build params so migration 0004 and the chunk model can
+    agree on HNSW/FTS configuration without constructing the full Settings."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
+    )
+
+    search_hnsw_m: int = 16
+    search_hnsw_ef_construction: int = 64
+    search_fts_language: str = "english"
+
+
+@lru_cache
+def get_index_params() -> IndexParams:
+    """HNSW/FTS build params — the single source of truth for migration 0004 and the
+    chunks tsvector column (mirrors get_embedding_dimension)."""
+    settings = _IndexParamSettings()
+    return IndexParams(
+        hnsw_m=settings.search_hnsw_m,
+        hnsw_ef_construction=settings.search_hnsw_ef_construction,
+        fts_language=settings.search_fts_language,
+    )

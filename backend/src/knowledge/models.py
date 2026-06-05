@@ -14,6 +14,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Computed,
     DateTime,
     Enum,
     ForeignKey,
@@ -25,10 +26,10 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.shared.config import get_embedding_dimension
+from src.shared.config import get_embedding_dimension, get_index_params
 from src.shared.database import Base
 
 PERMISSION_ENUM_NAME = "collection_permission"
@@ -36,6 +37,8 @@ DOCUMENT_STATUS_ENUM_NAME = "document_status"
 
 # Vector width: the single source of truth (settings), read once at import.
 _EMBEDDING_DIMENSION = get_embedding_dimension()
+# HNSW/FTS build params: the same single source the migration reads (CLAUDE.md §7).
+_INDEX_PARAMS = get_index_params()
 
 
 class Permission(StrEnum):
@@ -149,6 +152,19 @@ class Chunk(Base):
     __table_args__ = (
         UniqueConstraint("document_id", "content_hash", name="uq_chunks_document_id_content_hash"),
         Index("ix_chunks_org_id_document_id_seq", "org_id", "document_id", "seq"),
+        # Hybrid-retrieval indexes (migration 0004). HNSW for the vector arm (cosine),
+        # GIN for the FTS keyword arm. Build params come from the single source.
+        Index(
+            "ix_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={
+                "m": _INDEX_PARAMS.hnsw_m,
+                "ef_construction": _INDEX_PARAMS.hnsw_ef_construction,
+            },
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+        Index("ix_chunks_content_tsv_gin", "content_tsv", postgresql_using="gin"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -164,6 +180,13 @@ class Chunk(Base):
     )
     embedding: Mapped[list[float] | None] = mapped_column(
         Vector(_EMBEDDING_DIMENSION), nullable=True
+    )
+    # Postgres FTS vector for the keyword retrieval arm — generated/STORED from
+    # ``content`` by the DB (never written by the app). Language is the single-source
+    # config (migration 0004 builds the identical expression + a GIN index).
+    content_tsv: Mapped[str] = mapped_column(
+        TSVECTOR,
+        Computed(f"to_tsvector('{_INDEX_PARAMS.fts_language}', content)", persisted=True),
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
