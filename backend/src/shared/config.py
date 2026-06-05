@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     max_document_pages: int = 2000
     embedding_dimension: int
     embedding_batch_size: int = 100
+    # Chunking targets, in whitespace tokens (the token model the chunkers use).
+    chunk_token_target: int = 512
+    chunk_token_overlap: int = 64
+    # Table-aware chunking: data rows per chunk (the header row is repeated in each).
+    chunk_table_rows: int = 50
     ingest_max_attempts: int = 3
     ingest_stuck_after_seconds: int = 1800
     # Fault-injection knob for failure drills only (default 0 = off in prod):

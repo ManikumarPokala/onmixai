@@ -5,7 +5,7 @@ import io
 from pptx import Presentation
 
 from src.knowledge.ingest_errors import ParserError
-from src.knowledge.parsing.base import ContentBlock, ParsedDocument
+from src.knowledge.parsing.base import ContentBlock, DocumentFormat, ParsedDocument
 
 
 class PptxParser:
@@ -30,4 +30,6 @@ class PptxParser:
                 notes = slide.notes_slide.notes_text_frame.text
                 if notes.strip():
                     blocks.append(ContentBlock(text=notes, ref={"slide": number, "kind": "notes"}))
-        return ParsedDocument(blocks=tuple(blocks), page_count=len(slides))
+        return ParsedDocument(
+            blocks=tuple(blocks), page_count=len(slides), format=DocumentFormat.PPTX
+        )

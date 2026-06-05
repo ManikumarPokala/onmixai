@@ -4,6 +4,13 @@ The document status state machine and all admission/permission checks live here
 as pure functions with branch-complete tests; services gather data and call these.
 """
 
+from src.knowledge.chunking import (
+    ChunkingStrategy,
+    ChunkParams,
+    ProseChunking,
+    SlideChunking,
+    TableAwareChunking,
+)
 from src.knowledge.exceptions import (
     CollectionAccessDeniedError,
     DocumentProcessingError,
@@ -13,6 +20,10 @@ from src.knowledge.exceptions import (
     UploadTooLargeError,
 )
 from src.knowledge.models import DocumentStatus, Permission
+from src.knowledge.parsing.base import DocumentFormat, ParsedDocument
+
+# Above this fraction of table blocks, a document is chunked as tabular data.
+_TABLE_RATIO_THRESHOLD = 0.6
 
 # Allowed document status transitions (patterns.md §3).
 _TRANSITIONS: dict[DocumentStatus, frozenset[DocumentStatus]] = {
@@ -72,3 +83,18 @@ def ensure_collection_permission(held: Permission, required: Permission) -> None
     """Enforce read < write < manage: ``held`` must meet ``required``. Time/Space: O(1)."""
     if _PERMISSION_RANK[held] < _PERMISSION_RANK[required]:
         raise CollectionAccessDeniedError(detail=f"requires {required.value}")
+
+
+def select_chunking_strategy(parsed: ParsedDocument, params: ChunkParams) -> ChunkingStrategy:
+    """Pick a chunking strategy from the document's shape (patterns.md §4).
+
+    Spreadsheets and table-dominant documents chunk as tables (header repeated per
+    row group); slide decks chunk per slide; everything else is prose. ``params``
+    (from Settings) is injected so the strategy carries no magic numbers.
+    Time/Space: O(1).
+    """
+    if parsed.format is DocumentFormat.XLSX or parsed.table_ratio > _TABLE_RATIO_THRESHOLD:
+        return TableAwareChunking(params)
+    if parsed.format is DocumentFormat.PPTX:
+        return SlideChunking(params)
+    return ProseChunking(params)

@@ -5,7 +5,7 @@ import io
 from openpyxl import load_workbook
 
 from src.knowledge.ingest_errors import ParserError
-from src.knowledge.parsing.base import ContentBlock, ParsedDocument
+from src.knowledge.parsing.base import ContentBlock, DocumentFormat, ParsedDocument
 
 
 class XlsxParser:
@@ -36,5 +36,8 @@ class XlsxParser:
         finally:
             workbook.close()
         return ParsedDocument(
-            blocks=tuple(blocks), page_count=page_count, table_ratio=1.0 if blocks else 0.0
+            blocks=tuple(blocks),
+            page_count=page_count,
+            format=DocumentFormat.XLSX,
+            table_ratio=1.0 if blocks else 0.0,
         )

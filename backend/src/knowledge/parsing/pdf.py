@@ -1,7 +1,7 @@
 """PDF parser (PyMuPDF), page-by-page, with OCR fallback for scanned pages."""
 
 from src.knowledge.ingest_errors import ParserError
-from src.knowledge.parsing.base import ContentBlock, OcrEngine, ParsedDocument
+from src.knowledge.parsing.base import ContentBlock, DocumentFormat, OcrEngine, ParsedDocument
 
 
 class PdfParser:
@@ -56,6 +56,10 @@ class PdfParser:
                 # would otherwise reach READY with zero chunks (breaks the Task 8
                 # READY ⇒ chunks invariant). Fail it permanently with a reason.
                 raise ParserError("no extractable text in PDF")
-            return ParsedDocument(blocks=tuple(blocks), page_count=document.page_count)
+            return ParsedDocument(
+                blocks=tuple(blocks),
+                page_count=document.page_count,
+                format=DocumentFormat.PDF,
+            )
         finally:
             document.close()

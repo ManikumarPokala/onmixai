@@ -5,7 +5,7 @@ import io
 from docx import Document as DocxDocument
 
 from src.knowledge.ingest_errors import ParserError
-from src.knowledge.parsing.base import ContentBlock, ParsedDocument
+from src.knowledge.parsing.base import ContentBlock, DocumentFormat, ParsedDocument
 
 
 class DocxParser:
@@ -31,4 +31,6 @@ class DocxParser:
                 table_count += 1
 
         ratio = table_count / len(blocks) if blocks else 0.0
-        return ParsedDocument(blocks=tuple(blocks), page_count=1, table_ratio=ratio)
+        return ParsedDocument(
+            blocks=tuple(blocks), page_count=1, format=DocumentFormat.DOCX, table_ratio=ratio
+        )

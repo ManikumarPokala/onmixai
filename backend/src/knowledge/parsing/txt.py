@@ -3,7 +3,7 @@
 from charset_normalizer import from_bytes
 
 from src.knowledge.ingest_errors import ParserError
-from src.knowledge.parsing.base import ContentBlock, ParsedDocument
+from src.knowledge.parsing.base import ContentBlock, DocumentFormat, ParsedDocument
 
 
 class TxtParser:
@@ -18,7 +18,11 @@ class TxtParser:
             text = data.decode("utf-8")
         except UnicodeDecodeError:
             text = self._decode_legacy(data)
-        return ParsedDocument(blocks=(ContentBlock(text=text, ref={"page": 1}),), page_count=1)
+        return ParsedDocument(
+            blocks=(ContentBlock(text=text, ref={"page": 1}),),
+            page_count=1,
+            format=DocumentFormat.TXT,
+        )
 
     def _decode_legacy(self, data: bytes) -> str:
         # charset-normalizer scores candidate encodings by language coherence, so

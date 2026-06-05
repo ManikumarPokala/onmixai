@@ -7,7 +7,18 @@ table ratio used to pick a chunking strategy (Task 7).
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Protocol
+
+
+class DocumentFormat(Enum):
+    """The parsed format — selects the chunking strategy (rules.py, patterns §4)."""
+
+    PDF = "pdf"
+    DOCX = "docx"
+    PPTX = "pptx"
+    XLSX = "xlsx"
+    TXT = "txt"
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +38,7 @@ class ParsedDocument:
 
     blocks: tuple[ContentBlock, ...]
     page_count: int
+    format: DocumentFormat
     table_ratio: float = field(default=0.0)
 
 

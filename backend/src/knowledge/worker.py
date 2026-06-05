@@ -14,7 +14,6 @@ into the same pipeline.
 """
 
 import asyncio
-import hashlib
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 from uuid import UUID
@@ -22,18 +21,19 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from src.knowledge.chunking import ChunkParams, ChunkPiece, dedupe_by_hash
 from src.knowledge.ingest_errors import RetryableError, safe_reason
 from src.knowledge.models import Chunk
+from src.knowledge.parsing.base import ParsedDocument
 from src.knowledge.parsing.registry import ParserRegistry
 from src.knowledge.repository import ChunkRepository, DocumentRepository
+from src.knowledge.rules import select_chunking_strategy
 from src.shared.config import Settings, get_settings
 from src.shared.database import get_sessionmaker, set_tenant_context
 from src.shared.queue import INGEST_TASK
 from src.shared.storage import ObjectStorage, get_object_storage
 
 _logger = structlog.get_logger("ingest")
-
-_CHUNK_CHARS = 1000
 
 type SessionMaker = async_sessionmaker[Any]
 
@@ -46,34 +46,38 @@ class TenantLister(Protocol):
     async def all_org_ids(self) -> list[UUID]: ...
 
 
-def _build_chunks(org_id: UUID, document_id: UUID, text: str) -> list[Chunk]:
-    """Deterministic fixed-window chunking (placeholder for Task 7 strategies).
+def _chunk_params(settings: Settings) -> ChunkParams:
+    return ChunkParams(
+        token_target=settings.chunk_token_target,
+        token_overlap=settings.chunk_token_overlap,
+        table_rows=settings.chunk_table_rows,
+    )
 
-    Time: O(len(text)). Duplicate windows are de-duplicated by content hash so
-    (document_id, content_hash) uniqueness holds.
+
+def _build_chunks(
+    org_id: UUID, document_id: UUID, parsed: ParsedDocument, params: ChunkParams
+) -> list[Chunk]:
+    """Chunk a parsed document with the format-appropriate strategy (rules §4).
+
+    De-dupes by content hash so (document_id, content_hash) uniqueness holds, then
+    assigns the ORM ``seq`` in document order. Time: O(tokens) — the strategy is a
+    single pass and de-dup/enumeration are linear. Space: O(chunks).
     """
-    chunks: list[Chunk] = []
-    seen: set[str] = set()
-    seq = 0
-    for start in range(0, len(text), _CHUNK_CHARS):
-        part = text[start : start + _CHUNK_CHARS]
-        content_hash = hashlib.sha256(part.strip().encode("utf-8")).hexdigest()
-        if content_hash in seen:
-            continue
-        seen.add(content_hash)
-        chunks.append(
-            Chunk(
-                org_id=org_id,
-                document_id=document_id,
-                seq=seq,
-                content=part,
-                content_hash=content_hash,
-                token_count=len(part.split()),
-                chunk_metadata={},
-            )
-        )
-        seq += 1
-    return chunks
+    strategy = select_chunking_strategy(parsed, params)
+    pieces = dedupe_by_hash(strategy.chunk(parsed))
+    return [_to_chunk(org_id, document_id, seq, piece) for seq, piece in enumerate(pieces)]
+
+
+def _to_chunk(org_id: UUID, document_id: UUID, seq: int, piece: ChunkPiece) -> Chunk:
+    return Chunk(
+        org_id=org_id,
+        document_id=document_id,
+        seq=seq,
+        content=piece.content,
+        content_hash=piece.content_hash,
+        token_count=piece.token_count,
+        chunk_metadata=dict(piece.metadata),
+    )
 
 
 async def _read_object(storage: ObjectStorage, key: str) -> bytes:
@@ -114,8 +118,8 @@ async def ingest_document(ctx: dict[str, Any], document_id: str, org_id: str) ->
                 await asyncio.sleep(settings.ingest_chaos_delay_seconds)
             data = await _read_object(storage, storage_key)
             parsed = registry.parse(content_type, data, max_pages=settings.max_document_pages)
-            text = "\n\n".join(block.text for block in parsed.blocks)
-            await chunks.replace_for_document(oid, doc_id, _build_chunks(oid, doc_id, text))
+            built = _build_chunks(oid, doc_id, parsed, _chunk_params(settings))
+            await chunks.replace_for_document(oid, doc_id, built)
             await documents.mark_ready(oid, doc_id, page_count=parsed.page_count)
             await session.commit()
             _logger.info("ingest.ready", document_id=document_id, org_id=org_id)
