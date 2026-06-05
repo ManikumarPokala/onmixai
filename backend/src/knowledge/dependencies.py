@@ -11,7 +11,7 @@ from src.knowledge.repository import (
     DocumentRepository,
     StorageOutboxRepository,
 )
-from src.knowledge.service import KnowledgeService, OrgQuotaReader
+from src.knowledge.service import ChunkRetrievalService, KnowledgeService, OrgQuotaReader
 from src.shared.audit import AuditEmitter, get_audit_emitter
 from src.shared.config import Settings, get_settings
 from src.shared.queue import JobQueue, get_job_queue
@@ -39,3 +39,12 @@ def get_knowledge_service(
         quota_reader=quota_reader,
         settings=settings,
     )
+
+
+def get_chunk_retrieval_service(
+    session: AsyncSession = Depends(get_tenant_session),
+    settings: Settings = Depends(get_settings),
+) -> ChunkRetrievalService:
+    """Knowledge's retrieval interface — the search domain injects this as its
+    ChunkCandidateReader port, so search never touches knowledge's repository."""
+    return ChunkRetrievalService(ChunkRepository(session), settings)

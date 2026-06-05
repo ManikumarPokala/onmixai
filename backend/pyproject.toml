@@ -147,12 +147,17 @@ name = "OpenAI SDK only imported by ai adapters"
 type = "forbidden"
 source_modules = [
     "src.main",
+    "src.search",
     "src.knowledge",
     "src.identity",
     "src.ai.embedding",
     "src.shared",
 ]
 forbidden_modules = ["openai"]
+# Only DIRECT imports are forbidden: ai/adapters/openai_embedder.py is the sole SDK
+# site. Other modules may reach it transitively (e.g. main → search → ai.dependencies
+# → the adapter) without importing the vendor SDK themselves.
+allow_indirect_imports = "true"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
