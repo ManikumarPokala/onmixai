@@ -137,7 +137,9 @@ class DocumentRepository:
         result = cast("CursorResult[Any]", await self._session.execute(stmt))
         return result.rowcount == 1
 
-    async def mark_ready(self, org_id: UUID, document_id: UUID) -> None:
+    async def mark_ready(
+        self, org_id: UUID, document_id: UUID, *, page_count: int | None = None
+    ) -> None:
         """processing → ready (compare-and-set), clearing any prior failure reason."""
         stmt = (
             update(Document)
@@ -146,7 +148,7 @@ class DocumentRepository:
                 Document.id == document_id,
                 Document.status == DocumentStatus.PROCESSING,
             )
-            .values(status=DocumentStatus.READY, failure_reason=None)
+            .values(status=DocumentStatus.READY, failure_reason=None, page_count=page_count)
         )
         await self._session.execute(stmt)
 

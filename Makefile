@@ -18,8 +18,8 @@ install: ## Create the venv and install backend deps (dev extras)
 dev: ## Run the API locally with autoreload
 	cd $(BACKEND) && $(abspath $(VENV))/uvicorn src.main:create_app --factory --reload
 
-test: ## Run the full test suite with coverage gate
-	cd $(BACKEND) && $(abspath $(VENV))/pytest --cov=src --cov-fail-under=80 -q
+test: ## Run the full test suite with coverage gate (parser tests run isolated; see ADR 0008)
+	cd $(BACKEND) && PYTEST=$(abspath $(VENV))/pytest ./scripts/run-tests.sh
 
 lint: ## Ruff lint + format check
 	cd $(BACKEND) && $(abspath $(VENV))/ruff check . && $(abspath $(VENV))/ruff format --check .

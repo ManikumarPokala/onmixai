@@ -22,7 +22,9 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from src.knowledge.ingest_errors import RetryableError, safe_reason
 from src.knowledge.models import Chunk
+from src.knowledge.parsing.registry import ParserRegistry
 from src.knowledge.repository import ChunkRepository, DocumentRepository
 from src.shared.config import Settings, get_settings
 from src.shared.database import get_sessionmaker, set_tenant_context
@@ -35,47 +37,13 @@ _CHUNK_CHARS = 1000
 
 type SessionMaker = async_sessionmaker[Any]
 
+__all__ = ["RetryableError", "ingest_document", "ingest_startup", "sweep_stuck_documents"]
+
 
 class TenantLister(Protocol):
     """Tenant enumeration the sweeper needs; identity's OrgPolicyService satisfies it."""
 
     async def all_org_ids(self) -> list[UUID]: ...
-
-
-class RetryableError(Exception):
-    """A transient ingestion failure that should be retried."""
-
-
-class IngestError(Exception):
-    """A permanent ingestion failure carrying a user-safe reason."""
-
-    def __init__(self, reason: str) -> None:
-        self.reason = reason
-        super().__init__(reason)
-
-
-def safe_reason(exc: Exception) -> str:
-    """User-visible failure reason that never leaks internals."""
-    if isinstance(exc, IngestError):
-        return exc.reason
-    return "ingestion failed"
-
-
-def _parse_txt(data: bytes) -> str:
-    try:
-        return data.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise IngestError("file is not valid UTF-8 text") from exc
-
-
-_PARSERS = {"text/plain": _parse_txt}
-
-
-def _parse(content_type: str, data: bytes) -> str:
-    parser = _PARSERS.get(content_type)
-    if parser is None:
-        raise IngestError(f"no parser for content type {content_type}")
-    return parser(data)
 
 
 def _build_chunks(org_id: UUID, document_id: UUID, text: str) -> list[Chunk]:
@@ -118,6 +86,7 @@ async def ingest_document(ctx: dict[str, Any], document_id: str, org_id: str) ->
     maker: SessionMaker = ctx["sessionmaker"]
     storage: ObjectStorage = ctx["storage"]
     settings: Settings = ctx["settings"]
+    registry: ParserRegistry = ctx["registry"]
 
     async with maker() as session:
         await set_tenant_context(session, oid)
@@ -144,9 +113,10 @@ async def ingest_document(ctx: dict[str, Any], document_id: str, org_id: str) ->
             if settings.ingest_chaos_delay_seconds > 0:
                 await asyncio.sleep(settings.ingest_chaos_delay_seconds)
             data = await _read_object(storage, storage_key)
-            text = _parse(content_type, data)
+            parsed = registry.parse(content_type, data, max_pages=settings.max_document_pages)
+            text = "\n\n".join(block.text for block in parsed.blocks)
             await chunks.replace_for_document(oid, doc_id, _build_chunks(oid, doc_id, text))
-            await documents.mark_ready(oid, doc_id)
+            await documents.mark_ready(oid, doc_id, page_count=parsed.page_count)
             await session.commit()
             _logger.info("ingest.ready", document_id=document_id, org_id=org_id)
         except RetryableError:
@@ -223,6 +193,9 @@ async def sweep_stuck_documents(ctx: dict[str, Any]) -> None:
 
 async def ingest_startup(ctx: dict[str, Any]) -> None:
     """Populate the arq ctx with the worker's shared resources (on_startup hook)."""
+    from src.knowledge.parsing.ocr_tesseract import TesseractOcrEngine
+
     ctx["sessionmaker"] = get_sessionmaker()
     ctx["storage"] = get_object_storage()
     ctx["settings"] = get_settings()
+    ctx["registry"] = ParserRegistry(TesseractOcrEngine())

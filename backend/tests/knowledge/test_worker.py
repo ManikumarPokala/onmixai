@@ -17,10 +17,12 @@ from src.identity.models import Organization, Role, User
 from src.identity.repository import OrganizationRepository
 from src.identity.service import OrgPolicyService
 from src.knowledge.models import Collection, Document, DocumentStatus
+from src.knowledge.parsing.registry import ParserRegistry
 from src.knowledge.repository import ChunkRepository, DocumentRepository
 from src.knowledge.worker import RetryableError, ingest_document, sweep_stuck_documents
 from src.shared.config import Settings
 from src.shared.database import set_tenant_context
+from tests.fakes.fake_ocr import FakeOcrEngine
 from tests.fakes.fake_storage import FakeObjectStorage
 
 
@@ -71,6 +73,7 @@ def _ctx(engine: AsyncEngine, storage: FakeObjectStorage, settings: Settings) ->
         "storage": storage,
         "settings": settings,
         "redis": None,
+        "registry": ParserRegistry(FakeOcrEngine()),
         "tenant_lister_factory": lambda s: OrgPolicyService(OrganizationRepository(s)),
     }
 

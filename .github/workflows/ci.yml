@@ -84,7 +84,9 @@ jobs:
           enable-cache: true
       - run: uv venv --python ${{ env.PYTHON_VERSION }} .venv
       - run: uv pip install --python .venv -e ".[dev]"
-      - run: .venv/bin/pytest --cov=src --cov-fail-under=80 -q
+      # Two passes: the async suite, then the parser tests isolated from the
+      # pytest-asyncio plugin (PyMuPDF SWIG conflict). See ADR 0008.
+      - run: ./scripts/run-tests.sh
 
   isolation:
     # Separate, permanently-blocking job. Runs as the non-bypassrls runtime role

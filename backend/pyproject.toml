@@ -24,6 +24,12 @@ dependencies = [
     "arq==0.28.0",
     "redis==5.3.1",
     "pgvector==0.4.2",
+    "pymupdf==1.27.2.3",
+    "python-docx==1.2.0",
+    "python-pptx==1.0.2",
+    "openpyxl==3.1.5",
+    "charset-normalizer==3.4.7",
+    "pytesseract==0.3.13",
 ]
 
 [project.optional-dependencies]
@@ -89,6 +95,12 @@ module = [
     "arq.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Parser libraries are partially/incompletely typed — treat as untyped (Any).
+module = ["pymupdf.*", "fitz.*", "docx.*", "pptx.*", "pytesseract.*", "openpyxl.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.importlinter]
 root_package = "src"

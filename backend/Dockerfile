@@ -8,6 +8,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# System dependency: the Tesseract binary, invoked by the worker's OCR fallback
+# for scanned PDFs (pytesseract shells out to it). The API never calls it, but the
+# same image runs both processes (compose overrides the command for the worker).
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+
 # Dependency layer — copy only the project metadata first for build-cache reuse.
 COPY pyproject.toml ./
 COPY src ./src
