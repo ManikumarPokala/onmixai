@@ -22,6 +22,7 @@ from src.knowledge.repository import ChunkRepository, DocumentRepository
 from src.knowledge.worker import RetryableError, ingest_document, sweep_stuck_documents
 from src.shared.config import Settings
 from src.shared.database import set_tenant_context
+from tests.fakes.fake_embedder import FakeEmbedder
 from tests.fakes.fake_ocr import FakeOcrEngine
 from tests.fakes.fake_storage import FakeObjectStorage
 
@@ -74,6 +75,7 @@ def _ctx(engine: AsyncEngine, storage: FakeObjectStorage, settings: Settings) ->
         "settings": settings,
         "redis": None,
         "registry": ParserRegistry(FakeOcrEngine()),
+        "embedder": FakeEmbedder(settings.embedding_dimension),
         "tenant_lister_factory": lambda s: OrgPolicyService(OrganizationRepository(s)),
     }
 

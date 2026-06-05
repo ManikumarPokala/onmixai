@@ -66,6 +66,14 @@ class Settings(BaseSettings):
     max_document_pages: int = 2000
     embedding_dimension: int
     embedding_batch_size: int = 100
+    # Embedding provider (OpenAI-compatible). The API key is optional so non-worker
+    # processes and tests (which use the fake) construct Settings without it; the
+    # real adapter validates its presence when built.
+    embedding_model: str = "text-embedding-3-small"
+    embedding_api_key: SecretStr | None = None
+    embedding_base_url: str | None = None
+    embedding_timeout_seconds: float = 30.0
+    embedding_max_attempts: int = 3
     # Chunking targets, in whitespace tokens (the token model the chunkers use).
     chunk_token_target: int = 512
     chunk_token_overlap: int = 64

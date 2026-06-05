@@ -12,6 +12,7 @@ from arq import cron
 from arq.connections import RedisSettings
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.adapters.openai_embedder import OpenAIEmbedder
 from src.identity import models as _identity_models  # noqa: F401 - register identity tables
 from src.identity.repository import OrganizationRepository
 from src.identity.service import OrgPolicyService
@@ -29,6 +30,7 @@ def _make_tenant_lister(session: AsyncSession) -> OrgPolicyService:
 async def _on_startup(ctx: dict[str, Any]) -> None:
     await ingest_startup(ctx)
     ctx["tenant_lister_factory"] = _make_tenant_lister
+    ctx["embedder"] = OpenAIEmbedder(ctx["settings"])
 
 
 class WorkerSettings:

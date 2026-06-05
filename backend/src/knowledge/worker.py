@@ -21,9 +21,9 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from src.ai.embedding import Embedder, Vector
 from src.knowledge.chunking import ChunkParams, ChunkPiece, dedupe_by_hash
 from src.knowledge.ingest_errors import RetryableError, safe_reason
-from src.knowledge.models import Chunk
 from src.knowledge.parsing.base import ParsedDocument
 from src.knowledge.parsing.registry import ParserRegistry
 from src.knowledge.repository import ChunkRepository, DocumentRepository
@@ -54,30 +54,66 @@ def _chunk_params(settings: Settings) -> ChunkParams:
     )
 
 
-def _build_chunks(
-    org_id: UUID, document_id: UUID, parsed: ParsedDocument, params: ChunkParams
-) -> list[Chunk]:
-    """Chunk a parsed document with the format-appropriate strategy (rules §4).
+def _build_pieces(parsed: ParsedDocument, params: ChunkParams) -> list[ChunkPiece]:
+    """Chunk with the format-appropriate strategy (rules §4), de-duped by hash.
 
-    De-dupes by content hash so (document_id, content_hash) uniqueness holds, then
-    assigns the ORM ``seq`` in document order. Time: O(tokens) — the strategy is a
-    single pass and de-dup/enumeration are linear. Space: O(chunks).
+    Time: O(tokens) — single-pass strategy plus linear de-dup. Space: O(chunks).
     """
     strategy = select_chunking_strategy(parsed, params)
-    pieces = dedupe_by_hash(strategy.chunk(parsed))
-    return [_to_chunk(org_id, document_id, seq, piece) for seq, piece in enumerate(pieces)]
+    return dedupe_by_hash(strategy.chunk(parsed))
 
 
-def _to_chunk(org_id: UUID, document_id: UUID, seq: int, piece: ChunkPiece) -> Chunk:
-    return Chunk(
-        org_id=org_id,
-        document_id=document_id,
-        seq=seq,
-        content=piece.content,
-        content_hash=piece.content_hash,
-        token_count=piece.token_count,
-        chunk_metadata=dict(piece.metadata),
-    )
+async def _embed_and_store(
+    chunks: ChunkRepository,
+    embedder: Embedder,
+    org_id: UUID,
+    document_id: UUID,
+    pieces: list[ChunkPiece],
+    existing: set[str],
+    batch_size: int,
+) -> None:
+    """Embed the not-yet-stored chunks in batches and bulk-upsert them.
+
+    Only pieces whose content hash is not already stored are embedded, so a re-run
+    on unchanged content makes zero provider calls and inserts zero rows. At most
+    two batches are embedded concurrently (bounded concurrency) and results are
+    consumed in order, so peak memory is O(batch) regardless of document size;
+    each batch is one bulk INSERT, giving O(batches) statements. Documents reach
+    READY only after this returns, so a READY document never has null embeddings.
+
+    Time: O(chunks) work + O(batches) provider/DB round-trips. Space: O(batch).
+    """
+    indexed = [(seq, p) for seq, p in enumerate(pieces) if p.content_hash not in existing]
+    batches = [indexed[start : start + batch_size] for start in range(0, len(indexed), batch_size)]
+    semaphore = asyncio.Semaphore(2)
+
+    async def embed_batch(batch: list[tuple[int, ChunkPiece]]) -> list[Vector]:
+        async with semaphore:
+            return await embedder.embed([piece.content for _, piece in batch])
+
+    tasks = [asyncio.create_task(embed_batch(batch)) for batch in batches]
+    for batch, task in zip(batches, tasks, strict=True):
+        vectors = await task
+        rows = [
+            _row(org_id, document_id, seq, piece, vector)
+            for (seq, piece), vector in zip(batch, vectors, strict=True)
+        ]
+        await chunks.upsert_embedded(rows)
+
+
+def _row(
+    org_id: UUID, document_id: UUID, seq: int, piece: ChunkPiece, embedding: Vector
+) -> dict[str, Any]:
+    return {
+        "org_id": org_id,
+        "document_id": document_id,
+        "seq": seq,
+        "content": piece.content,
+        "content_hash": piece.content_hash,
+        "token_count": piece.token_count,
+        "chunk_metadata": dict(piece.metadata),
+        "embedding": embedding,
+    }
 
 
 async def _read_object(storage: ObjectStorage, key: str) -> bytes:
@@ -91,6 +127,7 @@ async def ingest_document(ctx: dict[str, Any], document_id: str, org_id: str) ->
     storage: ObjectStorage = ctx["storage"]
     settings: Settings = ctx["settings"]
     registry: ParserRegistry = ctx["registry"]
+    embedder: Embedder = ctx["embedder"]
 
     async with maker() as session:
         await set_tenant_context(session, oid)
@@ -118,8 +155,11 @@ async def ingest_document(ctx: dict[str, Any], document_id: str, org_id: str) ->
                 await asyncio.sleep(settings.ingest_chaos_delay_seconds)
             data = await _read_object(storage, storage_key)
             parsed = registry.parse(content_type, data, max_pages=settings.max_document_pages)
-            built = _build_chunks(oid, doc_id, parsed, _chunk_params(settings))
-            await chunks.replace_for_document(oid, doc_id, built)
+            pieces = _build_pieces(parsed, _chunk_params(settings))
+            existing = await chunks.hashes_for_document(oid, doc_id)
+            await _embed_and_store(
+                chunks, embedder, oid, doc_id, pieces, existing, settings.embedding_batch_size
+            )
             await documents.mark_ready(oid, doc_id, page_count=parsed.page_count)
             await session.commit()
             _logger.info("ingest.ready", document_id=document_id, org_id=org_id)
@@ -196,7 +236,11 @@ async def sweep_stuck_documents(ctx: dict[str, Any]) -> None:
 
 
 async def ingest_startup(ctx: dict[str, Any]) -> None:
-    """Populate the arq ctx with the worker's shared resources (on_startup hook)."""
+    """Populate the arq ctx with knowledge's shared resources (on_startup hook).
+
+    The cross-domain embedder is wired by the composition root (src/worker.py),
+    not here — knowledge depends only on the Embedder Protocol via ``ctx``.
+    """
     from src.knowledge.parsing.ocr_tesseract import TesseractOcrEngine
 
     ctx["sessionmaker"] = get_sessionmaker()

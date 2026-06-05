@@ -30,6 +30,7 @@ dependencies = [
     "openpyxl==3.1.5",
     "charset-normalizer==3.4.7",
     "pytesseract==0.3.13",
+    "openai==2.41.0",
 ]
 
 [project.optional-dependencies]
@@ -104,14 +105,19 @@ follow_imports = "skip"
 
 [tool.importlinter]
 root_package = "src"
+# Required so the SDK-confinement contract can name an external package (openai).
+include_external_packages = "true"
 
 [[tool.importlinter.contracts]]
 # Dependency stack (CLAUDE.md §3.3): main may import anything; knowledge may
 # import identity (auth) + shared; identity may import shared; shared imports no
 # domain. Reverse imports (e.g. identity -> knowledge) are forbidden.
-name = "Layered architecture: main > knowledge > identity > shared"
+name = "Layered architecture: main > knowledge > identity > ai > shared"
 type = "layers"
-layers = ["src.main", "src.knowledge", "src.identity", "src.shared"]
+# knowledge depends on the ai domain only through its Embedder Protocol; ai sits
+# below the feature domains and above shared. identity and ai never import each
+# other (the linear stack merely forbids upward imports).
+layers = ["src.main", "src.knowledge", "src.identity", "src.ai", "src.shared"]
 
 [[tool.importlinter.contracts]]
 # Cross-domain access is via the other domain's interface (service/dependencies/
@@ -123,6 +129,20 @@ forbidden_modules = ["src.identity.repository", "src.identity.models"]
 # Only DIRECT imports are forbidden: knowledge may import identity's interface
 # (dependencies/schemas), which legitimately uses identity's repository internally.
 allow_indirect_imports = "true"
+
+[[tool.importlinter.contracts]]
+# The embedding provider SDK is confined to ai/adapters/ (CLAUDE.md §3.6): every
+# other module depends on the Embedder Protocol, never the vendor SDK.
+name = "OpenAI SDK only imported by ai adapters"
+type = "forbidden"
+source_modules = [
+    "src.main",
+    "src.knowledge",
+    "src.identity",
+    "src.ai.embedding",
+    "src.shared",
+]
+forbidden_modules = ["openai"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

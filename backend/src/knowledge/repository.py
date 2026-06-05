@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, delete, func, select, update
+from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -188,20 +188,23 @@ class ChunkRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def replace_for_document(
-        self, org_id: UUID, document_id: UUID, chunks: list[Chunk]
-    ) -> None:
-        """Replace a document's chunks (delete + insert) — idempotent re-run.
+    async def upsert_embedded(self, rows: list[dict[str, Any]]) -> None:
+        """Bulk-insert embedded chunks, skipping any whose (document_id,
+        content_hash) already exists (patterns.md §7 — deterministic upsert).
 
-        Deterministic chunking means a re-run produces the identical chunk set.
-        Time: O(existing + new).
+        One INSERT per call, so a document of n chunks costs O(batches) statements,
+        never O(n) (performance.md §5). Re-running with the same content inserts
+        zero rows and leaves existing embeddings untouched. Time: O(rows) in one
+        statement. Space: O(rows).
         """
-        await self._session.execute(
-            delete(Chunk).where(Chunk.org_id == org_id, Chunk.document_id == document_id)
+        if not rows:
+            return
+        statement = (
+            insert(Chunk)
+            .values(rows)
+            .on_conflict_do_nothing(index_elements=["document_id", "content_hash"])
         )
-        if chunks:
-            self._session.add_all(chunks)
-            await self._session.flush()
+        await self._session.execute(statement)
 
     async def hashes_for_document(self, org_id: UUID, document_id: UUID) -> set[str]:
         stmt = select(Chunk.content_hash).where(
