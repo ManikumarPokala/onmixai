@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, Select, delete, func, select, text, update
+from sqlalchemy import CursorResult, Select, delete, func, literal, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -363,6 +363,13 @@ class ChunkRepository:
             .limit(top_k)
         )
 
+    def by_ids_select(self, org_id: UUID, user_id: UUID, chunk_ids: list[UUID]) -> Select[Any]:
+        """ACL-filtered fetch of specific chunk ids (same predicate as the arms), so a
+        known id in an inaccessible collection — or another org — returns nothing."""
+        return self._candidate_select(
+            org_id, user_id, RetrievalFilters(), score=literal(0.0)
+        ).where(Chunk.id.in_(chunk_ids))
+
     async def search_vector(
         self,
         org_id: UUID,
@@ -398,6 +405,16 @@ class ChunkRepository:
         Time: O(matches · log matches). Space: O(top_k).
         """
         stmt = self.keyword_select(org_id, user_id, query, language, filters, top_k)
+        return [_to_candidate(row) for row in (await self._session.execute(stmt)).all()]
+
+    async def candidates_by_ids(
+        self, org_id: UUID, user_id: UUID, chunk_ids: list[UUID]
+    ) -> list[ChunkCandidate]:
+        """ACL-filtered fetch by chunk id (e.g. Phase 3 citation hydration). An id the
+        actor cannot access yields nothing. Time: O(len(ids)). Space: O(len(ids))."""
+        if not chunk_ids:
+            return []
+        stmt = self.by_ids_select(org_id, user_id, chunk_ids)
         return [_to_candidate(row) for row in (await self._session.execute(stmt)).all()]
 
 

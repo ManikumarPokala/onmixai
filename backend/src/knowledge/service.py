@@ -371,3 +371,9 @@ class ChunkRetrievalService:
             filters=filters,
             top_k=top_k,
         )
+
+    async def candidates_by_ids(
+        self, org_id: UUID, user_id: UUID, chunk_ids: list[UUID]
+    ) -> list[ChunkCandidate]:
+        """ACL-filtered fetch of specific chunk ids (no leak by direct id)."""
+        return await self._chunks.candidates_by_ids(org_id, user_id, chunk_ids)
