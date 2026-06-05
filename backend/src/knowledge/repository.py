@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, delete, func, select, update
+from sqlalchemy import CursorResult, Select, delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ from src.knowledge.models import (
     Permission,
     StorageDeletionOutbox,
 )
+from src.knowledge.schemas import ChunkCandidate, RetrievalFilters
 
 _LIST_CAP = 100
 
@@ -279,6 +280,137 @@ class ChunkRepository:
         if keep_hashes:
             stmt = stmt.where(Chunk.content_hash.not_in(keep_hashes))
         await self._session.execute(stmt)
+
+    def _candidate_select(
+        self, org_id: UUID, user_id: UUID, filters: RetrievalFilters, score: Any
+    ) -> Select[Any]:
+        """Chunk columns + a ``score`` expression, with the org_id + collection-ACL
+        predicate and metadata narrowing applied BEFORE any ranking (CLAUDE.md §4).
+
+        The ACL is an EXISTS over collection_permissions for ``user_id`` on the
+        chunk's document collection; a chunk the user cannot access is never a
+        candidate. Time/Space: O(1) to build.
+        """
+        has_permission = (
+            select(CollectionPermission.id)
+            .where(
+                CollectionPermission.org_id == org_id,
+                CollectionPermission.collection_id == Document.collection_id,
+                CollectionPermission.user_id == user_id,
+            )
+            .exists()
+        )
+        stmt = (
+            select(
+                Chunk.id.label("chunk_id"),
+                Chunk.document_id.label("document_id"),
+                Document.collection_id.label("collection_id"),
+                Document.filename.label("filename"),
+                Chunk.content.label("content"),
+                Chunk.chunk_metadata.label("ref"),
+                score.label("score"),
+            )
+            .join(Document, Document.id == Chunk.document_id)
+            .where(
+                Chunk.org_id == org_id,
+                Chunk.embedding.isnot(None),
+                Document.superseded.is_(False),
+                has_permission,
+            )
+        )
+        if filters.collection_id is not None:
+            stmt = stmt.where(Document.collection_id == filters.collection_id)
+        if filters.content_type is not None:
+            stmt = stmt.where(Document.content_type == filters.content_type)
+        if filters.created_after is not None:
+            stmt = stmt.where(Document.created_at >= filters.created_after)
+        if filters.created_before is not None:
+            stmt = stmt.where(Document.created_at <= filters.created_before)
+        return stmt
+
+    def vector_select(
+        self,
+        org_id: UUID,
+        user_id: UUID,
+        embedding: list[float],
+        filters: RetrievalFilters,
+        top_k: int,
+    ) -> Select[Any]:
+        """The ACL-filtered nearest-neighbour statement (cosine distance, HNSW)."""
+        distance = Chunk.embedding.cosine_distance(embedding)
+        return (
+            self._candidate_select(org_id, user_id, filters, score=1 - distance)
+            .order_by(distance)
+            .limit(top_k)
+        )
+
+    def keyword_select(
+        self,
+        org_id: UUID,
+        user_id: UUID,
+        query: str,
+        language: str,
+        filters: RetrievalFilters,
+        top_k: int,
+    ) -> Select[Any]:
+        """The ACL-filtered full-text statement (websearch_to_tsquery, GIN, ts_rank)."""
+        tsquery = func.websearch_to_tsquery(language, query)
+        rank = func.ts_rank(Chunk.content_tsv, tsquery)
+        return (
+            self._candidate_select(org_id, user_id, filters, score=rank)
+            .where(Chunk.content_tsv.op("@@")(tsquery))
+            .order_by(rank.desc())
+            .limit(top_k)
+        )
+
+    async def search_vector(
+        self,
+        org_id: UUID,
+        user_id: UUID,
+        *,
+        embedding: list[float],
+        filters: RetrievalFilters,
+        top_k: int,
+        ef_search: int,
+    ) -> list[ChunkCandidate]:
+        """Nearest chunks by cosine distance via the HNSW index, ACL-filtered first.
+
+        Time: O(log n) HNSW probe + O(top_k). Space: O(top_k). n = org's chunks.
+        """
+        await self._session.execute(
+            text("SELECT set_config('hnsw.ef_search', :ef, true)"), {"ef": str(ef_search)}
+        )
+        stmt = self.vector_select(org_id, user_id, embedding, filters, top_k)
+        return [_to_candidate(row) for row in (await self._session.execute(stmt)).all()]
+
+    async def search_keyword(
+        self,
+        org_id: UUID,
+        user_id: UUID,
+        *,
+        query: str,
+        language: str,
+        filters: RetrievalFilters,
+        top_k: int,
+    ) -> list[ChunkCandidate]:
+        """Top chunks by full-text rank via the GIN index, ACL-filtered first.
+
+        Time: O(matches · log matches). Space: O(top_k).
+        """
+        stmt = self.keyword_select(org_id, user_id, query, language, filters, top_k)
+        return [_to_candidate(row) for row in (await self._session.execute(stmt)).all()]
+
+
+def _to_candidate(row: Any) -> ChunkCandidate:
+    return ChunkCandidate(
+        chunk_id=row.chunk_id,
+        document_id=row.document_id,
+        collection_id=row.collection_id,
+        filename=row.filename,
+        content=row.content,
+        ref=row.ref or {},
+        score=float(row.score),
+    )
 
 
 class StorageOutboxRepository:

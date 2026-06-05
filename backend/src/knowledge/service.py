@@ -36,7 +36,13 @@ from src.knowledge.rules import (
     ensure_upload_acceptable,
     ensure_within_quota,
 )
-from src.knowledge.schemas import CollectionDTO, DocumentDTO, UploadAccepted
+from src.knowledge.schemas import (
+    ChunkCandidate,
+    CollectionDTO,
+    DocumentDTO,
+    RetrievalFilters,
+    UploadAccepted,
+)
 from src.shared.audit import AuditEmitter
 from src.shared.config import Settings
 from src.shared.database import register_after_commit
@@ -322,3 +328,46 @@ class KnowledgeService:
                 raise UploadTooLargeError(detail=f"exceeds {max_bytes} bytes")
             hasher.update(chunk)
             yield chunk
+
+
+class ChunkRetrievalService:
+    """Knowledge's retrieval interface — satisfies search's ChunkCandidateReader
+    port structurally (CLAUDE.md §3.3). The two arms are ACL-filtered in the SQL
+    predicate; the FTS language is knowledge's index property (the same one the
+    tsvector column was built with), so the keyword arm sources it from settings."""
+
+    def __init__(self, chunks: ChunkRepository, settings: Settings) -> None:
+        self._chunks = chunks
+        self._settings = settings
+
+    async def vector_candidates(
+        self,
+        org_id: UUID,
+        user_id: UUID,
+        *,
+        embedding: list[float],
+        filters: RetrievalFilters,
+        top_k: int,
+        ef_search: int,
+    ) -> list[ChunkCandidate]:
+        return await self._chunks.search_vector(
+            org_id, user_id, embedding=embedding, filters=filters, top_k=top_k, ef_search=ef_search
+        )
+
+    async def keyword_candidates(
+        self,
+        org_id: UUID,
+        user_id: UUID,
+        *,
+        query: str,
+        filters: RetrievalFilters,
+        top_k: int,
+    ) -> list[ChunkCandidate]:
+        return await self._chunks.search_keyword(
+            org_id,
+            user_id,
+            query=query,
+            language=self._settings.search_fts_language,
+            filters=filters,
+            top_k=top_k,
+        )
