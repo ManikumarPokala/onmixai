@@ -112,12 +112,13 @@ include_external_packages = "true"
 # Dependency stack (CLAUDE.md §3.3): main may import anything; knowledge may
 # import identity (auth) + shared; identity may import shared; shared imports no
 # domain. Reverse imports (e.g. identity -> knowledge) are forbidden.
-name = "Layered architecture: main > knowledge > identity > ai > shared"
+name = "Layered architecture: main > search > knowledge > identity > ai > shared"
 type = "layers"
-# knowledge depends on the ai domain only through its Embedder Protocol; ai sits
-# below the feature domains and above shared. identity and ai never import each
-# other (the linear stack merely forbids upward imports).
-layers = ["src.main", "src.knowledge", "src.identity", "src.ai", "src.shared"]
+# search (Phase 2 retrieval) sits above knowledge: it consumes knowledge's
+# interface (the candidate-reader port + schemas) and ai's Embedder, never the
+# reverse. knowledge depends on ai only via the Embedder Protocol; ai sits below
+# the feature domains and above shared. The linear stack forbids upward imports.
+layers = ["src.main", "src.search", "src.knowledge", "src.identity", "src.ai", "src.shared"]
 
 [[tool.importlinter.contracts]]
 # Cross-domain access is via the other domain's interface (service/dependencies/
@@ -128,6 +129,15 @@ source_modules = ["src.knowledge"]
 forbidden_modules = ["src.identity.repository", "src.identity.models"]
 # Only DIRECT imports are forbidden: knowledge may import identity's interface
 # (dependencies/schemas), which legitimately uses identity's repository internally.
+allow_indirect_imports = "true"
+
+[[tool.importlinter.contracts]]
+# search reaches knowledge only through its interface (service/schemas/the
+# candidate-reader port it owns), never knowledge's repository or models.
+name = "search uses knowledge's interface, not its internals"
+type = "forbidden"
+source_modules = ["src.search"]
+forbidden_modules = ["src.knowledge.repository", "src.knowledge.models"]
 allow_indirect_imports = "true"
 
 [[tool.importlinter.contracts]]

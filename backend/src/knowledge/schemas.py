@@ -4,6 +4,7 @@ Internal DTOs carry full data between layers; response schemas are allow-lists
 returned to clients. ORM models never cross the layer boundary.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -13,6 +14,33 @@ from pydantic import BaseModel
 from src.knowledge.models import Collection, Document, DocumentStatus, Permission
 
 # --- Internal DTOs ---
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalFilters:
+    """Optional narrowing applied INSIDE the candidate query, alongside the ACL
+    predicate (never a post-filter). Owned by knowledge — the search domain builds
+    one and the candidate-reader port consumes it, so neither domain imports the
+    other's internals."""
+
+    collection_id: UUID | None = None
+    content_type: str | None = None
+    created_after: datetime | None = None
+    created_before: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ChunkCandidate:
+    """One ACL-cleared chunk returned by a retrieval arm, ordered best-first, with
+    its source attribution. The search domain fuses these into ranked results."""
+
+    chunk_id: UUID
+    document_id: UUID
+    collection_id: UUID
+    filename: str
+    content: str
+    ref: Mapping[str, str | int]  # provenance from chunk metadata (page/sheet/slide)
+    score: float  # raw per-arm score (cosine similarity or ts_rank), for transparency
 
 
 @dataclass(frozen=True, slots=True)
