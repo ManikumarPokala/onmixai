@@ -49,3 +49,10 @@ class InvalidStatusTransitionError(AppError):
 class CollectionAccessDeniedError(AppError):
     def __init__(self, *, detail: str | None = None) -> None:
         super().__init__("COLLECTION_ACCESS_DENIED", 403, "Collection access denied", detail)
+
+
+class CollectionNotEmptyError(AppError):
+    def __init__(self, *, detail: str | None = None) -> None:
+        super().__init__(
+            "COLLECTION_NOT_EMPTY", 409, "Cannot delete a collection with documents", detail
+        )

@@ -83,3 +83,49 @@ async def get_document(
     service: KnowledgeService = Depends(get_knowledge_service),
 ) -> DocumentResponse:
     return DocumentResponse.from_dto(await service.get_document(actor, document_id))
+
+
+@router.post("/documents/{document_id}/versions", status_code=status.HTTP_202_ACCEPTED)
+async def create_version(
+    document_id: UUID,
+    request: Request,
+    file: UploadFile = File(...),
+    actor: AuthContext = Depends(get_current_user),
+    service: KnowledgeService = Depends(get_knowledge_service),
+) -> UploadAccepted:
+    declared_size = int(request.headers.get("content-length", 0))
+    return await service.create_version(
+        actor,
+        document_id=document_id,
+        filename=file.filename or "upload",
+        content_type=file.content_type or "application/octet-stream",
+        declared_size=declared_size,
+        source=_stream_upload(file),
+    )
+
+
+@router.post("/documents/{document_id}/reindex", status_code=status.HTTP_202_ACCEPTED)
+async def reindex_document(
+    document_id: UUID,
+    actor: AuthContext = Depends(get_current_user),
+    service: KnowledgeService = Depends(get_knowledge_service),
+) -> None:
+    await service.reindex_document(actor, document_id)
+
+
+@router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    document_id: UUID,
+    actor: AuthContext = Depends(get_current_user),
+    service: KnowledgeService = Depends(get_knowledge_service),
+) -> None:
+    await service.delete_document(actor, document_id)
+
+
+@router.delete("/collections/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_collection(
+    collection_id: UUID,
+    actor: AuthContext = Depends(get_current_user),
+    service: KnowledgeService = Depends(get_knowledge_service),
+) -> None:
+    await service.delete_collection(actor, collection_id)

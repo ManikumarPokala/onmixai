@@ -13,6 +13,7 @@ from src.knowledge.chunking import (
 )
 from src.knowledge.exceptions import (
     CollectionAccessDeniedError,
+    CollectionNotEmptyError,
     DocumentProcessingError,
     DocumentQuotaExceededError,
     InvalidStatusTransitionError,
@@ -77,6 +78,12 @@ def ensure_document_deletable(status: DocumentStatus) -> None:
     """Forbid mutating a document mid-ingestion. Time/Space: O(1)."""
     if status == DocumentStatus.PROCESSING:
         raise DocumentProcessingError()
+
+
+def ensure_collection_empty(document_count: int) -> None:
+    """Forbid deleting a collection that still holds documents. Time/Space: O(1)."""
+    if document_count > 0:
+        raise CollectionNotEmptyError(detail=f"{document_count} documents remain")
 
 
 def ensure_collection_permission(held: Permission, required: Permission) -> None:

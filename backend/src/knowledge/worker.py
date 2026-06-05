@@ -26,7 +26,11 @@ from src.knowledge.chunking import ChunkParams, ChunkPiece, dedupe_by_hash
 from src.knowledge.ingest_errors import RetryableError, safe_reason
 from src.knowledge.parsing.base import ParsedDocument
 from src.knowledge.parsing.registry import ParserRegistry
-from src.knowledge.repository import ChunkRepository, DocumentRepository
+from src.knowledge.repository import (
+    ChunkRepository,
+    DocumentRepository,
+    StorageOutboxRepository,
+)
 from src.knowledge.rules import select_chunking_strategy
 from src.shared.config import Settings, get_settings
 from src.shared.database import get_sessionmaker, set_tenant_context
@@ -37,7 +41,13 @@ _logger = structlog.get_logger("ingest")
 
 type SessionMaker = async_sessionmaker[Any]
 
-__all__ = ["RetryableError", "ingest_document", "ingest_startup", "sweep_stuck_documents"]
+__all__ = [
+    "RetryableError",
+    "ingest_document",
+    "ingest_startup",
+    "sweep_storage_outbox",
+    "sweep_stuck_documents",
+]
 
 
 class TenantLister(Protocol):
@@ -150,6 +160,7 @@ async def ingest_document(ctx: dict[str, Any], document_id: str, org_id: str) ->
         attempt_count = document.attempt_count
         storage_key = document.storage_key
         content_type = document.content_type
+        supersedes_id = document.supersedes_id
         try:
             if settings.ingest_chaos_delay_seconds > 0:
                 await asyncio.sleep(settings.ingest_chaos_delay_seconds)
@@ -160,7 +171,13 @@ async def ingest_document(ctx: dict[str, Any], document_id: str, org_id: str) ->
             await _embed_and_store(
                 chunks, embedder, oid, doc_id, pieces, existing, settings.embedding_batch_size
             )
+            # Re-index cleanup: drop chunks whose hash this rebuild no longer produced.
+            await chunks.delete_stale(oid, doc_id, {piece.content_hash for piece in pieces})
             await documents.mark_ready(oid, doc_id, page_count=parsed.page_count)
+            if supersedes_id is not None:
+                # New version is READY: retire the prior one so retrieval sees one.
+                await chunks.delete_for_document(oid, supersedes_id)
+                await documents.mark_superseded(oid, supersedes_id)
             await session.commit()
             _logger.info("ingest.ready", document_id=document_id, org_id=org_id)
         except RetryableError:
@@ -232,6 +249,36 @@ async def sweep_stuck_documents(ctx: dict[str, Any]) -> None:
                     _logger.info(
                         "ingest.sweep_requeued", document_id=str(document.id), org_id=str(oid)
                     )
+            await session.commit()
+
+
+async def sweep_storage_outbox(ctx: dict[str, Any]) -> None:
+    """Delete storage objects recorded in the deletion outbox, then clear the rows.
+
+    The compensation half of cascade delete: a row persists whenever the delete's
+    after-commit storage call failed (or never ran), so retrying here guarantees no
+    object is orphaned. Storage delete is idempotent, so a row processed twice is
+    harmless. Time: O(pending rows). Space: O(1) per row.
+    """
+    maker: SessionMaker = ctx["sessionmaker"]
+    storage: ObjectStorage = ctx["storage"]
+    make_tenant_lister = ctx["tenant_lister_factory"]
+    async with maker() as session:
+        lister: TenantLister = make_tenant_lister(session)
+        org_ids = await lister.all_org_ids()
+
+    for oid in org_ids:
+        async with maker() as session:
+            await set_tenant_context(session, oid)
+            outbox = StorageOutboxRepository(session)
+            for row in await outbox.list_pending(oid):
+                try:
+                    await storage.delete(row.storage_key)
+                except Exception:
+                    await outbox.bump_attempts(oid, row.id)
+                    _logger.exception("storage_outbox.delete_failed", outbox_id=str(row.id))
+                else:
+                    await outbox.delete(oid, row.id)
             await session.commit()
 
 

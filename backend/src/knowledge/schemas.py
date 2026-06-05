@@ -42,6 +42,7 @@ class DocumentDTO:
     status: DocumentStatus
     failure_reason: str | None
     version: int
+    superseded: bool
     page_count: int | None
     created_at: datetime
 
@@ -56,6 +57,7 @@ class DocumentDTO:
             status=document.status,
             failure_reason=document.failure_reason,
             version=document.version,
+            superseded=document.superseded,
             page_count=document.page_count,
             created_at=document.created_at,
         )
@@ -97,6 +99,7 @@ class DocumentResponse(BaseModel):
     status: DocumentStatus
     failure_reason: str | None
     version: int
+    superseded: bool
     page_count: int | None
     created_at: datetime
 
@@ -111,6 +114,7 @@ class DocumentResponse(BaseModel):
             status=dto.status,
             failure_reason=dto.failure_reason,
             version=dto.version,
+            superseded=dto.superseded,
             page_count=dto.page_count,
             created_at=dto.created_at,
         )

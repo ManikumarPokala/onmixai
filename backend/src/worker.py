@@ -17,7 +17,12 @@ from src.identity import models as _identity_models  # noqa: F401 - register ide
 from src.identity.repository import OrganizationRepository
 from src.identity.service import OrgPolicyService
 from src.knowledge import models as _knowledge_models  # noqa: F401 - register knowledge tables
-from src.knowledge.worker import ingest_document, ingest_startup, sweep_stuck_documents
+from src.knowledge.worker import (
+    ingest_document,
+    ingest_startup,
+    sweep_storage_outbox,
+    sweep_stuck_documents,
+)
 from src.shared.config import get_settings
 
 
@@ -35,6 +40,9 @@ async def _on_startup(ctx: dict[str, Any]) -> None:
 
 class WorkerSettings:
     functions = [ingest_document]
-    cron_jobs = [cron(sweep_stuck_documents, minute=set(range(0, 60, 5)), run_at_startup=False)]
+    cron_jobs = [
+        cron(sweep_stuck_documents, minute=set(range(0, 60, 5)), run_at_startup=False),
+        cron(sweep_storage_outbox, minute=set(range(0, 60, 5)), run_at_startup=False),
+    ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     on_startup = _on_startup

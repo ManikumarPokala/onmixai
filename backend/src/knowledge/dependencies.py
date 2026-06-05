@@ -5,7 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.identity.dependencies import get_org_policy_service, get_tenant_session
 from src.identity.service import OrgPolicyService
-from src.knowledge.repository import CollectionRepository, DocumentRepository
+from src.knowledge.repository import (
+    ChunkRepository,
+    CollectionRepository,
+    DocumentRepository,
+    StorageOutboxRepository,
+)
 from src.knowledge.service import KnowledgeService, OrgQuotaReader
 from src.shared.audit import AuditEmitter, get_audit_emitter
 from src.shared.config import Settings, get_settings
@@ -26,6 +31,8 @@ def get_knowledge_service(
         session=session,
         collections=CollectionRepository(session),
         documents=DocumentRepository(session),
+        chunks=ChunkRepository(session),
+        outbox=StorageOutboxRepository(session),
         storage=storage,
         queue=queue,
         audit=audit,

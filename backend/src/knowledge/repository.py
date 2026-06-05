@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, func, select, update
+from sqlalchemy import CursorResult, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from src.knowledge.models import (
     Document,
     DocumentStatus,
     Permission,
+    StorageDeletionOutbox,
 )
 
 _LIST_CAP = 100
@@ -83,6 +84,12 @@ class CollectionRepository:
         )
         await self._session.execute(stmt)
 
+    async def delete(self, org_id: UUID, collection_id: UUID) -> None:
+        """Delete an (already-verified-empty) collection. Time: O(1)."""
+        await self._session.execute(
+            delete(Collection).where(Collection.org_id == org_id, Collection.id == collection_id)
+        )
+
 
 class DocumentRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -113,6 +120,14 @@ class DocumentRepository:
 
     async def count_for_org(self, org_id: UUID) -> int:
         stmt = select(func.count()).select_from(Document).where(Document.org_id == org_id)
+        return int((await self._session.execute(stmt)).scalar_one())
+
+    async def count_for_collection(self, org_id: UUID, collection_id: UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Document)
+            .where(Document.org_id == org_id, Document.collection_id == collection_id)
+        )
         return int((await self._session.execute(stmt)).scalar_one())
 
     async def claim_for_processing(self, org_id: UUID, document_id: UUID, now: datetime) -> bool:
@@ -174,6 +189,35 @@ class DocumentRepository:
         )
         await self._session.execute(stmt)
 
+    async def enqueue_reindex(self, org_id: UUID, document_id: UUID) -> bool:
+        """ready → queued for re-index (compare-and-set on READY). Returns True iff
+        the document was READY and is now QUEUED. Time: O(1)."""
+        stmt = (
+            update(Document)
+            .where(
+                Document.org_id == org_id,
+                Document.id == document_id,
+                Document.status == DocumentStatus.READY,
+            )
+            .values(status=DocumentStatus.QUEUED, claimed_at=None)
+        )
+        result = cast("CursorResult[Any]", await self._session.execute(stmt))
+        return result.rowcount == 1
+
+    async def mark_superseded(self, org_id: UUID, document_id: UUID) -> None:
+        """Flag a prior version replaced (its chunks are removed separately)."""
+        await self._session.execute(
+            update(Document)
+            .where(Document.org_id == org_id, Document.id == document_id)
+            .values(superseded=True)
+        )
+
+    async def delete(self, org_id: UUID, document_id: UUID) -> None:
+        """Delete a document; its chunks cascade via the FK. Time: O(chunks)."""
+        await self._session.execute(
+            delete(Document).where(Document.org_id == org_id, Document.id == document_id)
+        )
+
     async def list_stuck(self, org_id: UUID, claimed_before: datetime) -> list[Document]:
         """Documents stuck in PROCESSING past the deadline (dead worker)."""
         stmt = select(Document).where(
@@ -219,3 +263,53 @@ class ChunkRepository:
             .where(Chunk.org_id == org_id, Chunk.document_id == document_id)
         )
         return int((await self._session.execute(stmt)).scalar_one())
+
+    async def delete_for_document(self, org_id: UUID, document_id: UUID) -> None:
+        """Remove all of a document's chunks (used when superseding). Time: O(chunks)."""
+        await self._session.execute(
+            delete(Chunk).where(Chunk.org_id == org_id, Chunk.document_id == document_id)
+        )
+
+    async def delete_stale(self, org_id: UUID, document_id: UUID, keep_hashes: set[str]) -> None:
+        """Delete chunks whose content hash is no longer produced (re-index cleanup).
+
+        With upsert_embedded (insert new) this makes a rebuild converge to exactly
+        the current chunk set. Time: O(chunks). Space: O(len(keep_hashes))."""
+        stmt = delete(Chunk).where(Chunk.org_id == org_id, Chunk.document_id == document_id)
+        if keep_hashes:
+            stmt = stmt.where(Chunk.content_hash.not_in(keep_hashes))
+        await self._session.execute(stmt)
+
+
+class StorageOutboxRepository:
+    """Queries for the storage-deletion outbox (compensation log)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(self, org_id: UUID, storage_key: str) -> None:
+        self._session.add(StorageDeletionOutbox(org_id=org_id, storage_key=storage_key))
+        await self._session.flush()
+
+    async def list_pending(self, org_id: UUID, *, limit: int = 100) -> list[StorageDeletionOutbox]:
+        stmt = (
+            select(StorageDeletionOutbox)
+            .where(StorageDeletionOutbox.org_id == org_id)
+            .order_by(StorageDeletionOutbox.created_at)
+            .limit(min(limit, _LIST_CAP))
+        )
+        return list((await self._session.execute(stmt)).scalars())
+
+    async def delete(self, org_id: UUID, outbox_id: UUID) -> None:
+        await self._session.execute(
+            delete(StorageDeletionOutbox).where(
+                StorageDeletionOutbox.org_id == org_id, StorageDeletionOutbox.id == outbox_id
+            )
+        )
+
+    async def bump_attempts(self, org_id: UUID, outbox_id: UUID) -> None:
+        await self._session.execute(
+            update(StorageDeletionOutbox)
+            .where(StorageDeletionOutbox.org_id == org_id, StorageDeletionOutbox.id == outbox_id)
+            .values(attempts=StorageDeletionOutbox.attempts + 1)
+        )

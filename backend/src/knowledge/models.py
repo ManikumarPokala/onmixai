@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     Enum,
     ForeignKey,
@@ -119,6 +120,10 @@ class Document(Base):
     supersedes_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
     )
+    # A version that has been replaced: kept for history (status stays READY) but
+    # its chunks are removed once the newer version is READY, so retrieval (Phase 2)
+    # never sees two live versions of the same document. See ADR 0007.
+    superseded: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     status: Mapped[DocumentStatus] = mapped_column(
         Enum(
             DocumentStatus,
@@ -160,4 +165,24 @@ class Chunk(Base):
     embedding: Mapped[list[float] | None] = mapped_column(
         Vector(_EMBEDDING_DIMENSION), nullable=True
     )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class StorageDeletionOutbox(Base):
+    """Durable intent to delete a storage object (transactional outbox).
+
+    A document delete removes the row (chunks cascade) and records the object's key
+    here in the same transaction; the object is then deleted best-effort after
+    commit, and a sweeper retries any rows left behind — so a crash between the DB
+    commit and the storage delete can never orphan an object. See the domain README.
+    """
+
+    __tablename__ = "storage_deletion_outbox"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    org_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    storage_key: Mapped[str] = mapped_column(String(1024))
+    attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

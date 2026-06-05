@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.identity.models import Role
 from src.identity.schemas import AuthContext
 from src.knowledge.exceptions import DocumentQuotaExceededError, UploadTooLargeError
-from src.knowledge.repository import CollectionRepository, DocumentRepository
+from src.knowledge.repository import (
+    ChunkRepository,
+    CollectionRepository,
+    DocumentRepository,
+    StorageOutboxRepository,
+)
 from src.knowledge.service import KnowledgeService, OrgQuotaReader
 from src.shared.audit import AuditEmitter
 from src.shared.config import Settings
@@ -42,6 +47,8 @@ def _service(
         session=db_session,
         collections=CollectionRepository(db_session),
         documents=DocumentRepository(db_session),
+        chunks=ChunkRepository(db_session),
+        outbox=StorageOutboxRepository(db_session),
         storage=storage or FakeObjectStorage(),
         queue=FakeJobQueue(),
         audit=AuditEmitter(),
