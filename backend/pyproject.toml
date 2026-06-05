@@ -64,6 +64,8 @@ max-complexity = 10
 [tool.ruff.lint.per-file-ignores]
 # Operational drill/CLI scripts may print to stdout.
 "scripts/**" = ["T201"]
+# The retrieval eval reports recall@5/MRR to stdout (make eval-retrieval).
+"tests/eval/**" = ["T201"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency-injection markers are used as argument defaults by design.

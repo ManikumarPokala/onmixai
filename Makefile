@@ -6,7 +6,7 @@ BACKEND := backend
 VENV := $(BACKEND)/.venv/bin
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: help install dev test lint typecheck contracts migrate fmt verify
+.PHONY: help install dev test eval-retrieval lint typecheck contracts migrate fmt verify
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -20,6 +20,9 @@ dev: ## Run the API locally with autoreload
 
 test: ## Run the full test suite with coverage gate (parser tests run isolated; see ADR 0008)
 	cd $(BACKEND) && PYTEST=$(abspath $(VENV))/pytest ./scripts/run-tests.sh
+
+eval-retrieval: ## Retrieval golden-set eval — reports recall@5/MRR, gates >=0.85
+	cd $(BACKEND) && $(abspath $(VENV))/pytest tests/eval -q -s
 
 lint: ## Ruff lint + format check
 	cd $(BACKEND) && $(abspath $(VENV))/ruff check . && $(abspath $(VENV))/ruff format --check .
