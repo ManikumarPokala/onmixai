@@ -4,13 +4,22 @@ Every method is tenant-scoped; results are ORM models / None with no business
 decisions. Application org-scoping sits alongside Postgres RLS (defense in depth).
 """
 
+from datetime import datetime
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import column, func, select, table
+from sqlalchemy import CursorResult, column, delete, func, select, table, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.knowledge.models import Collection, CollectionPermission, Document, Permission
+from src.knowledge.models import (
+    Chunk,
+    Collection,
+    CollectionPermission,
+    Document,
+    DocumentStatus,
+    Permission,
+)
 
 _LIST_CAP = 100
 
@@ -114,4 +123,108 @@ class DocumentRepository:
     async def org_max_documents(self, org_id: UUID) -> int:
         """Read the org's document quota (tenant-root config). Time: O(1) indexed."""
         stmt = select(_organizations.c.max_documents).where(_organizations.c.id == org_id)
+        return int((await self._session.execute(stmt)).scalar_one())
+
+    async def all_org_ids(self) -> list[UUID]:
+        """All org ids (organizations has no RLS) — used to sweep per tenant."""
+        return list((await self._session.execute(select(_organizations.c.id))).scalars())
+
+    async def claim_for_processing(self, org_id: UUID, document_id: UUID, now: datetime) -> bool:
+        """Atomically claim a QUEUED document (compare-and-set). Returns True iff won.
+
+        Concurrent duplicate deliveries: exactly one UPDATE matches status='queued';
+        the loser gets rowcount 0 and backs off (patterns.md §3/§7). Time: O(1).
+        """
+        stmt = (
+            update(Document)
+            .where(
+                Document.org_id == org_id,
+                Document.id == document_id,
+                Document.status == DocumentStatus.QUEUED,
+            )
+            .values(
+                status=DocumentStatus.PROCESSING,
+                claimed_at=now,
+                attempt_count=Document.attempt_count + 1,
+            )
+        )
+        result = cast("CursorResult[Any]", await self._session.execute(stmt))
+        return result.rowcount == 1
+
+    async def mark_ready(self, org_id: UUID, document_id: UUID) -> None:
+        """processing → ready (compare-and-set), clearing any prior failure reason."""
+        stmt = (
+            update(Document)
+            .where(
+                Document.org_id == org_id,
+                Document.id == document_id,
+                Document.status == DocumentStatus.PROCESSING,
+            )
+            .values(status=DocumentStatus.READY, failure_reason=None)
+        )
+        await self._session.execute(stmt)
+
+    async def mark_failed(self, org_id: UUID, document_id: UUID, reason: str) -> None:
+        """Terminal failure with a user-visible reason."""
+        stmt = (
+            update(Document)
+            .where(Document.org_id == org_id, Document.id == document_id)
+            .values(status=DocumentStatus.FAILED, failure_reason=reason)
+        )
+        await self._session.execute(stmt)
+
+    async def requeue(self, org_id: UUID, document_id: UUID) -> None:
+        """processing → queued (retry / sweeper recovery), clearing the claim."""
+        stmt = (
+            update(Document)
+            .where(
+                Document.org_id == org_id,
+                Document.id == document_id,
+                Document.status == DocumentStatus.PROCESSING,
+            )
+            .values(status=DocumentStatus.QUEUED, claimed_at=None)
+        )
+        await self._session.execute(stmt)
+
+    async def list_stuck(self, org_id: UUID, claimed_before: datetime) -> list[Document]:
+        """Documents stuck in PROCESSING past the deadline (dead worker)."""
+        stmt = select(Document).where(
+            Document.org_id == org_id,
+            Document.status == DocumentStatus.PROCESSING,
+            Document.claimed_at < claimed_before,
+        )
+        return list((await self._session.execute(stmt)).scalars())
+
+
+class ChunkRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def replace_for_document(
+        self, org_id: UUID, document_id: UUID, chunks: list[Chunk]
+    ) -> None:
+        """Replace a document's chunks (delete + insert) — idempotent re-run.
+
+        Deterministic chunking means a re-run produces the identical chunk set.
+        Time: O(existing + new).
+        """
+        await self._session.execute(
+            delete(Chunk).where(Chunk.org_id == org_id, Chunk.document_id == document_id)
+        )
+        if chunks:
+            self._session.add_all(chunks)
+            await self._session.flush()
+
+    async def hashes_for_document(self, org_id: UUID, document_id: UUID) -> set[str]:
+        stmt = select(Chunk.content_hash).where(
+            Chunk.org_id == org_id, Chunk.document_id == document_id
+        )
+        return set((await self._session.execute(stmt)).scalars())
+
+    async def count_for_document(self, org_id: UUID, document_id: UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Chunk)
+            .where(Chunk.org_id == org_id, Chunk.document_id == document_id)
+        )
         return int((await self._session.execute(stmt)).scalar_one())

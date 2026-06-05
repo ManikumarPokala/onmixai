@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 100
     ingest_max_attempts: int = 3
     ingest_stuck_after_seconds: int = 1800
+    # Fault-injection knob for failure drills only (default 0 = off in prod):
+    # an artificial pause inside ingestion so a kill/sweep drill can land mid-task.
+    ingest_chaos_delay_seconds: float = 0.0
 
     @field_validator("jwt_secret")
     @classmethod
