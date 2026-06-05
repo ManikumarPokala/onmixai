@@ -105,7 +105,7 @@ async def test_openai_adapter_retries_transient_failure() -> None:
     embedder = OpenAIEmbedder(_settings(embedding_max_attempts=3))
     stub = _StubClient(lambda _text: [0.0] * _DIMENSION, fail_times=1)
     embedder._client = stub  # type: ignore[assignment]
-    embedder._backoff = lambda _attempt: 0.0  # type: ignore[method-assign]
+    embedder._backoff = lambda attempt: 0.0  # type: ignore[method-assign]
     vectors = await embedder.embed(["x"])
     assert len(vectors) == 1
     assert len(stub.embeddings.batches) == 2  # failed once, then succeeded

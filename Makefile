@@ -24,8 +24,8 @@ test: ## Run the full test suite with coverage gate (parser tests run isolated; 
 lint: ## Ruff lint + format check
 	cd $(BACKEND) && $(abspath $(VENV))/ruff check . && $(abspath $(VENV))/ruff format --check .
 
-typecheck: ## mypy --strict
-	cd $(BACKEND) && $(abspath $(VENV))/mypy src/
+typecheck: ## mypy --strict (src + tests, matching CI)
+	cd $(BACKEND) && $(abspath $(VENV))/mypy src/ tests/
 
 contracts: ## import-linter architecture contracts
 	cd $(BACKEND) && $(abspath $(VENV))/lint-imports

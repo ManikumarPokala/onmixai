@@ -4,7 +4,7 @@ with the READY ⇒ no-null-embeddings invariant. Real Postgres; fake embedder.""
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import event, func, select, update
+from sqlalchemy import Executable, event, func, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from src.ai.embedding import EmbeddingDimensionError, Vector
@@ -83,11 +83,11 @@ async def _status(engine: AsyncEngine, org_id: UUID, document_id: UUID) -> Docum
         return document
 
 
-async def _scalar(engine: AsyncEngine, org_id: UUID, stmt: object) -> int:
+async def _scalar(engine: AsyncEngine, org_id: UUID, stmt: Executable) -> int:
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as session:
         await set_tenant_context(session, org_id)
-        return int((await session.execute(stmt)).scalar_one())  # type: ignore[arg-type]
+        return int((await session.execute(stmt)).scalar_one())
 
 
 async def test_chunks_embed_in_batches_with_bounded_statement_count(
