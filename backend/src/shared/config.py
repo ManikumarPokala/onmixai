@@ -98,6 +98,20 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def _reject_chaos_in_prod(self) -> "Settings":
+        """Fault injection must be structurally impossible in production.
+
+        A nonzero ingest_chaos_delay_seconds with ENV=prod is a startup failure
+        (same posture as the dev-secret denylist). Time: O(1). Space: O(1).
+        """
+        if self.env == "prod" and self.ingest_chaos_delay_seconds != 0:
+            raise ValueError(
+                "INGEST_CHAOS_DELAY_SECONDS must be 0 when ENV=prod (fault injection "
+                "is not allowed in production)"
+            )
+        return self
+
 
 @lru_cache
 def get_settings() -> Settings:

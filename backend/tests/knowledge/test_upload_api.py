@@ -9,14 +9,45 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.identity.models import Role
 from src.identity.schemas import AuthContext
-from src.knowledge.exceptions import UploadTooLargeError
+from src.knowledge.exceptions import DocumentQuotaExceededError, UploadTooLargeError
 from src.knowledge.repository import CollectionRepository, DocumentRepository
-from src.knowledge.service import KnowledgeService
+from src.knowledge.service import KnowledgeService, OrgQuotaReader
 from src.shared.audit import AuditEmitter
 from src.shared.config import Settings
 from tests.fakes.fake_queue import FakeJobQueue
 from tests.fakes.fake_storage import FakeObjectStorage
 from tests.knowledge.conftest import UPLOAD_LIMIT, KnowledgeHarness, register_and_login
+
+
+class _FakeQuota:
+    """Stand-in OrgQuotaReader proving the quota path goes through the interface."""
+
+    def __init__(self, quota: int) -> None:
+        self.quota = quota
+        self.calls = 0
+
+    async def get_document_quota(self, org_id: UUID) -> int:
+        self.calls += 1
+        return self.quota
+
+
+def _service(
+    db_session: AsyncSession,
+    settings: Settings,
+    *,
+    quota: OrgQuotaReader,
+    storage: FakeObjectStorage | None = None,
+) -> KnowledgeService:
+    return KnowledgeService(
+        session=db_session,
+        collections=CollectionRepository(db_session),
+        documents=DocumentRepository(db_session),
+        storage=storage or FakeObjectStorage(),
+        queue=FakeJobQueue(),
+        audit=AuditEmitter(),
+        quota_reader=quota,
+        settings=settings,
+    )
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -112,14 +143,11 @@ async def test_mid_stream_oversize_aborts_storage(
     actor = AuthContext(user_id=UUID(me["id"]), org_id=UUID(me["org_id"]), role=Role.OWNER)
 
     storage = FakeObjectStorage()
-    service = KnowledgeService(
-        session=db_session,
-        collections=CollectionRepository(db_session),
-        documents=DocumentRepository(db_session),
+    service = _service(
+        db_session,
+        settings.model_copy(update={"max_upload_bytes": 10}),
+        quota=_FakeQuota(500),
         storage=storage,
-        queue=FakeJobQueue(),
-        audit=AuditEmitter(),
-        settings=settings.model_copy(update={"max_upload_bytes": 10}),
     )
     collection = await service.create_collection(actor, name="Direct", description=None)
 
@@ -136,3 +164,39 @@ async def test_mid_stream_oversize_aborts_storage(
             source=_oversize(),
         )
     assert storage.objects == {}
+
+
+async def test_quota_path_goes_through_injected_reader(
+    harness: KnowledgeHarness, db_session: AsyncSession, settings: Settings
+) -> None:
+    # Proves the quota comes from the OrgQuotaReader interface, not a knowledge
+    # query of identity's table: a fake reader with quota=1 blocks the 2nd upload.
+    token = await register_and_login(harness.client, slug="acme", email="o@acme.test")
+    me = (await harness.client.get("/api/v1/users/me", headers=_auth(token))).json()
+    actor = AuthContext(user_id=UUID(me["id"]), org_id=UUID(me["org_id"]), role=Role.OWNER)
+
+    quota = _FakeQuota(1)
+    service = _service(db_session, settings, quota=quota)
+    collection = await service.create_collection(actor, name="Quota", description=None)
+
+    async def _one_byte() -> AsyncIterator[bytes]:
+        yield b"a"
+
+    await service.upload_document(
+        actor,
+        collection_id=collection.id,
+        filename="a.txt",
+        content_type="text/plain",
+        declared_size=1,
+        source=_one_byte(),
+    )
+    with pytest.raises(DocumentQuotaExceededError):
+        await service.upload_document(
+            actor,
+            collection_id=collection.id,
+            filename="b.txt",
+            content_type="text/plain",
+            declared_size=1,
+            source=_one_byte(),
+        )
+    assert quota.calls >= 2  # the quota was read through the interface each upload

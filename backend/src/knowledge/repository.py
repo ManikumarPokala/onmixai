@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, column, delete, func, select, table, update
+from sqlalchemy import CursorResult, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,11 +22,6 @@ from src.knowledge.models import (
 )
 
 _LIST_CAP = 100
-
-# Lightweight Core handle for the org-quota config value. The organizations table
-# is the tenant root (identity domain, no RLS); knowledge reads only this config
-# scalar — no identity import, no escape-hatch raw SQL.
-_organizations = table("organizations", column("id"), column("max_documents"))
 
 
 class CollectionRepository:
@@ -119,15 +114,6 @@ class DocumentRepository:
     async def count_for_org(self, org_id: UUID) -> int:
         stmt = select(func.count()).select_from(Document).where(Document.org_id == org_id)
         return int((await self._session.execute(stmt)).scalar_one())
-
-    async def org_max_documents(self, org_id: UUID) -> int:
-        """Read the org's document quota (tenant-root config). Time: O(1) indexed."""
-        stmt = select(_organizations.c.max_documents).where(_organizations.c.id == org_id)
-        return int((await self._session.execute(stmt)).scalar_one())
-
-    async def all_org_ids(self) -> list[UUID]:
-        """All org ids (organizations has no RLS) — used to sweep per tenant."""
-        return list((await self._session.execute(select(_organizations.c.id))).scalars())
 
     async def claim_for_processing(self, org_id: UUID, document_id: UUID, now: datetime) -> bool:
         """Atomically claim a QUEUED document (compare-and-set). Returns True iff won.

@@ -8,6 +8,7 @@ only after the request commits (so the worker never races an uncommitted row).
 
 import hashlib
 from collections.abc import AsyncIterator
+from typing import Protocol
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +38,13 @@ from src.shared.storage import ObjectStorage
 _UPLOAD_CHUNK = 1024 * 1024
 
 
+class OrgQuotaReader(Protocol):
+    """The org-quota port knowledge depends on; identity's OrgPolicyService
+    satisfies it structurally (CLAUDE.md §3.3 — cross-domain via interface)."""
+
+    async def get_document_quota(self, org_id: UUID) -> int: ...
+
+
 class KnowledgeService:
     def __init__(
         self,
@@ -47,6 +55,7 @@ class KnowledgeService:
         storage: ObjectStorage,
         queue: JobQueue,
         audit: AuditEmitter,
+        quota_reader: OrgQuotaReader,
         settings: Settings,
     ) -> None:
         self._session = session
@@ -55,6 +64,7 @@ class KnowledgeService:
         self._storage = storage
         self._queue = queue
         self._audit = audit
+        self._quota_reader = quota_reader
         self._settings = settings
 
     async def create_collection(
@@ -117,7 +127,7 @@ class KnowledgeService:
         ensure_upload_acceptable(declared_size, content_type, self._settings.max_upload_bytes)
         ensure_within_quota(
             await self._documents.count_for_org(actor.org_id),
-            await self._documents.org_max_documents(actor.org_id),
+            await self._quota_reader.get_document_quota(actor.org_id),
         )
 
         storage_key = f"org/{actor.org_id}/doc/{uuid4()}"

@@ -35,6 +35,10 @@ class OrganizationRepository:
         stmt = select(Organization).where(Organization.id == org_id)
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
+    async def all_ids(self) -> list[UUID]:
+        """All organization ids (organizations has no RLS). Used to sweep tenants."""
+        return list((await self._session.execute(select(Organization.id))).scalars())
+
 
 class UserRepository:
     def __init__(self, session: AsyncSession) -> None:

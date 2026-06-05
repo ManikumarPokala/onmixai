@@ -23,7 +23,7 @@ from src.identity.repository import (
     UserRepository,
 )
 from src.identity.schemas import AuthContext
-from src.identity.service import AuthService
+from src.identity.service import AuthService, OrgPolicyService
 from src.shared.config import Settings, get_settings
 from src.shared.database import get_db_session, set_tenant_context
 from src.shared.errors import AuthenticationError
@@ -44,6 +44,13 @@ def get_auth_service(
         refresh_tokens=RefreshTokenRepository(session),
         settings=settings,
     )
+
+
+def get_org_policy_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> OrgPolicyService:
+    """Read-only org policy service for cross-domain consumers (e.g. quotas)."""
+    return OrgPolicyService(OrganizationRepository(session))
 
 
 async def get_current_user(

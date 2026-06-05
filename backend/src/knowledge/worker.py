@@ -16,7 +16,7 @@ into the same pipeline.
 import asyncio
 import hashlib
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
 from uuid import UUID
 
 import structlog
@@ -34,6 +34,12 @@ _logger = structlog.get_logger("ingest")
 _CHUNK_CHARS = 1000
 
 type SessionMaker = async_sessionmaker[Any]
+
+
+class TenantLister(Protocol):
+    """Tenant enumeration the sweeper needs; identity's OrgPolicyService satisfies it."""
+
+    async def all_org_ids(self) -> list[UUID]: ...
 
 
 class RetryableError(Exception):
@@ -189,9 +195,11 @@ async def sweep_stuck_documents(ctx: dict[str, Any]) -> None:
     """Re-queue documents stuck in PROCESSING past the deadline (dead worker)."""
     maker: SessionMaker = ctx["sessionmaker"]
     settings: Settings = ctx["settings"]
+    make_tenant_lister = ctx["tenant_lister_factory"]
     cutoff = datetime.now(UTC) - timedelta(seconds=settings.ingest_stuck_after_seconds)
     async with maker() as session:
-        org_ids = await DocumentRepository(session).all_org_ids()
+        lister: TenantLister = make_tenant_lister(session)
+        org_ids = await lister.all_org_ids()
 
     for oid in org_ids:
         async with maker() as session:

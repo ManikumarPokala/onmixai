@@ -8,6 +8,7 @@ user/org server-side, never from request input.
 """
 
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -182,3 +183,25 @@ class AuthService:
             refresh_token=raw_refresh,
             expires_in=self._settings.access_token_ttl_seconds,
         )
+
+
+class OrgPolicyService:
+    """Read-only org policy interface other domains consume (CLAUDE.md §3.3).
+
+    Keeps organization-owned config (quotas, limits) behind a service method so
+    consumers never reach into identity's tables.
+    """
+
+    def __init__(self, organizations: OrganizationRepository) -> None:
+        self._orgs = organizations
+
+    async def get_document_quota(self, org_id: UUID) -> int:
+        """Return the organization's max-documents quota."""
+        org = await self._orgs.get_by_id(org_id)
+        if org is None:
+            raise NotFoundError("ORGANIZATION_NOT_FOUND")
+        return org.max_documents
+
+    async def all_org_ids(self) -> list[UUID]:
+        """All tenant ids (for system-level tenant enumeration, e.g. the sweeper)."""
+        return await self._orgs.all_ids()

@@ -14,6 +14,8 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from src.identity.models import Organization, Role, User
+from src.identity.repository import OrganizationRepository
+from src.identity.service import OrgPolicyService
 from src.knowledge.models import Collection, Document, DocumentStatus
 from src.knowledge.repository import ChunkRepository, DocumentRepository
 from src.knowledge.worker import RetryableError, ingest_document, sweep_stuck_documents
@@ -69,6 +71,7 @@ def _ctx(engine: AsyncEngine, storage: FakeObjectStorage, settings: Settings) ->
         "storage": storage,
         "settings": settings,
         "redis": None,
+        "tenant_lister_factory": lambda s: OrgPolicyService(OrganizationRepository(s)),
     }
 
 

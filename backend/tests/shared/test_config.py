@@ -73,6 +73,24 @@ def test_prod_accepts_unique_secret() -> None:
     assert settings.env == "prod"
 
 
+def test_prod_rejects_nonzero_chaos_delay() -> None:
+    with pytest.raises(ValidationError) as exc:
+        _build(
+            env="prod",
+            database_url=VALID_DSN,
+            jwt_secret=STRONG_SECRET,
+            ingest_chaos_delay_seconds=2.0,
+        )
+    assert "INGEST_CHAOS_DELAY_SECONDS" in str(exc.value)
+
+
+def test_dev_allows_chaos_delay() -> None:
+    settings = _build(
+        env="dev", database_url=VALID_DSN, jwt_secret=STRONG_SECRET, ingest_chaos_delay_seconds=5.0
+    )
+    assert settings.ingest_chaos_delay_seconds == 5.0
+
+
 def test_embedding_dimension_single_source(monkeypatch: pytest.MonkeyPatch) -> None:
     # get_embedding_dimension() and Settings.embedding_dimension read the same env
     # var and must never drift — the vector(N) column hangs off this one value.

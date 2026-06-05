@@ -14,11 +14,13 @@ from src.identity import models as _identity_models  # noqa: F401 - register ide
 from src.knowledge import models as _knowledge_models  # noqa: F401 - register knowledge tables
 from src.knowledge.worker import ingest_startup, sweep_stuck_documents
 from src.shared.config import get_settings
+from src.worker import _make_tenant_lister
 
 
 async def main() -> None:
     ctx: dict[str, Any] = {}
     await ingest_startup(ctx)
+    ctx["tenant_lister_factory"] = _make_tenant_lister
     ctx["redis"] = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
     try:
         await sweep_stuck_documents(ctx)
