@@ -155,6 +155,16 @@ class Settings(BaseSettings):
     langfuse_secret_key: SecretStr | None = None
     langfuse_host: str | None = None
 
+    # Conversation / chat (Phase 4). Limits the pipeline + assembly read; no magic
+    # numbers elsewhere (CLAUDE.md §3.8).
+    chat_max_sessions_per_user: int = 200
+    chat_message_max_chars: int = 8000
+    chat_history_turns: int = 10  # last-N turns kept in the assembled context
+    chat_summary_threshold_turns: int = 16  # session length that triggers a rolling summary
+    chat_context_token_budget: int = 6000  # max assembled-context tokens
+    chat_confidence_min_score: float = 0.0  # below → refuse before generating (Task 5)
+    chat_confidence_min_results: int = 1  # fewer retrieved → refuse before generating
+
     @field_validator("jwt_secret")
     @classmethod
     def _jwt_secret_long_enough(cls, value: SecretStr) -> SecretStr:
