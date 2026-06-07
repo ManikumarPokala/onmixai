@@ -120,13 +120,21 @@ include_external_packages = "true"
 # Dependency stack (CLAUDE.md §3.3): main may import anything; knowledge may
 # import identity (auth) + shared; identity may import shared; shared imports no
 # domain. Reverse imports (e.g. identity -> knowledge) are forbidden.
-name = "Layered architecture: main > search > knowledge > identity > ai > shared"
+name = "Layered architecture: main > conversation > search > knowledge > identity > ai > shared"
 type = "layers"
-# search (Phase 2 retrieval) sits above knowledge: it consumes knowledge's
-# interface (the candidate-reader port + schemas) and ai's Embedder, never the
-# reverse. knowledge depends on ai only via the Embedder Protocol; ai sits below
-# the feature domains and above shared. The linear stack forbids upward imports.
-layers = ["src.main", "src.search", "src.knowledge", "src.identity", "src.ai", "src.shared"]
+# conversation (Phase 4 chat) sits above search: it consumes the retriever, the ai
+# gateway/registry/guardrails, and knowledge schemas — never the reverse. search sits
+# above knowledge; ai sits below the feature domains and above shared. The linear stack
+# forbids upward imports.
+layers = [
+    "src.main",
+    "src.conversation",
+    "src.search",
+    "src.knowledge",
+    "src.identity",
+    "src.ai",
+    "src.shared",
+]
 
 [[tool.importlinter.contracts]]
 # Cross-domain access is via the other domain's interface (service/dependencies/
@@ -157,6 +165,7 @@ name = "Provider SDKs (openai, litellm, langfuse) only imported by ai adapters"
 type = "forbidden"
 source_modules = [
     "src.main",
+    "src.conversation",
     "src.search",
     "src.knowledge",
     "src.identity",

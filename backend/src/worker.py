@@ -12,7 +12,13 @@ from arq import cron
 from arq.connections import RedisSettings
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.adapters.litellm_gateway import LiteLLMGateway
 from src.ai.adapters.openai_embedder import OpenAIEmbedder
+from src.ai.dependencies import build_metered_traced_gateway, get_circuit_breaker, get_tracer
+from src.ai.gateway import LLMGateway
+from src.ai.repository import ModelConfigRepository
+from src.conversation import models as _conversation_models  # noqa: F401 - register tables
+from src.conversation.worker import summarize_session
 from src.identity import models as _identity_models  # noqa: F401 - register identity tables
 from src.identity.repository import OrganizationRepository
 from src.identity.service import OrgPolicyService
@@ -23,6 +29,7 @@ from src.knowledge.worker import (
     sweep_storage_outbox,
     sweep_stuck_documents,
 )
+from src.shared.audit import get_audit_emitter
 from src.shared.config import get_settings
 
 
@@ -32,14 +39,28 @@ def _make_tenant_lister(session: AsyncSession) -> OrgPolicyService:
     return OrgPolicyService(OrganizationRepository(session))
 
 
+def _make_gateway(session: AsyncSession) -> LLMGateway:
+    """Compose the full gateway (tracing → metering → litellm) for a worker session.
+    The provider adapter is imported only here, at the composition root."""
+    adapter = LiteLLMGateway(
+        settings=get_settings(),
+        configs=ModelConfigRepository(session),
+        breaker=get_circuit_breaker(),
+    )
+    return build_metered_traced_gateway(
+        inner=adapter, session=session, audit=get_audit_emitter(), tracer=get_tracer()
+    )
+
+
 async def _on_startup(ctx: dict[str, Any]) -> None:
     await ingest_startup(ctx)
     ctx["tenant_lister_factory"] = _make_tenant_lister
     ctx["embedder"] = OpenAIEmbedder(ctx["settings"])
+    ctx["gateway_factory"] = _make_gateway
 
 
 class WorkerSettings:
-    functions = [ingest_document]
+    functions = [ingest_document, summarize_session]
     cron_jobs = [
         cron(sweep_stuck_documents, minute=set(range(0, 60, 5)), run_at_startup=False),
         cron(sweep_storage_outbox, minute=set(range(0, 60, 5)), run_at_startup=False),

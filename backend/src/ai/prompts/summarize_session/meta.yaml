@@ -1,0 +1,8 @@
+name: summarize_session
+version: 1.0.0
+owner_feature: chat
+variables:
+  transcript: str
+body_sha256: 9bfd76b089e9ee3c1cfcd51c67c528e384632ea99f5b8d3d0329c7c4cbf9c1a3
+changelog:
+  - "1.0.0: initial rolling-summary template (concise, no invention)"
