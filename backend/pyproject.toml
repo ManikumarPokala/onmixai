@@ -32,6 +32,7 @@ dependencies = [
     "pytesseract==0.3.13",
     "openai==2.41.0",
     "litellm==1.88.0",
+    "langfuse==4.7.1",
 ]
 
 [project.optional-dependencies]
@@ -104,7 +105,7 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # Parser libraries are partially/incompletely typed — treat as untyped (Any).
-module = ["pymupdf.*", "fitz.*", "docx.*", "pptx.*", "pytesseract.*", "openpyxl.*", "litellm.*"]
+module = ["pymupdf.*", "fitz.*", "docx.*", "pptx.*", "pytesseract.*", "openpyxl.*", "litellm.*", "langfuse.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
@@ -150,7 +151,7 @@ allow_indirect_imports = "true"
 # depends on a Protocol (Embedder / LLMGateway), never a vendor SDK. openai serves
 # the embedder adapter; litellm serves the LLM gateway adapter (Task 4). Both are
 # importable only from ai/adapters/.
-name = "Provider SDKs (openai, litellm) only imported by ai adapters"
+name = "Provider SDKs (openai, litellm, langfuse) only imported by ai adapters"
 type = "forbidden"
 source_modules = [
     "src.main",
@@ -160,9 +161,11 @@ source_modules = [
     "src.ai.embedding",
     "src.ai.gateway",
     "src.ai.dependencies",
+    "src.ai.tracing",
+    "src.ai.metering",
     "src.shared",
 ]
-forbidden_modules = ["openai", "litellm"]
+forbidden_modules = ["openai", "litellm", "langfuse"]
 # Only DIRECT imports are forbidden: the adapters under ai/adapters/ are the sole SDK
 # sites. Other modules may reach them transitively (e.g. main → ai.dependencies → the
 # adapter) without importing the vendor SDK themselves.
