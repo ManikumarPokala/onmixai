@@ -54,7 +54,11 @@ def test_every_injection_is_structurally_neutralized_in_the_prompt(
     assert neutralized.count(OPEN_PREFIX) == 1 and neutralized.count(CLOSE_PREFIX) == 1
     # the neutralized form survives into the actual rendered prompt
     rendered = get_prompt_registry().render(
-        "grounded_answer", context=neutralized, question="what does the document say?"
+        "grounded_answer",
+        summary="",
+        history="",
+        sources=f"[1] {neutralized}",
+        question="what does the document say?",
     )
     assert FRAME_TEXT in rendered.messages[1].content
     assert OPEN_PREFIX in rendered.messages[1].content

@@ -46,8 +46,10 @@ def _make_template(
 
 def test_seed_templates_load_and_hash_pin() -> None:
     registry = load_registry()  # raises if a template.md changed without a meta bump
-    rendered = registry.render("grounded_answer", context="the sky is blue", question="color?")
-    assert rendered.template_version == "1.0.0"
+    rendered = registry.render(
+        "grounded_answer", summary="", history="", sources="[1] the sky is blue", question="color?"
+    )
+    assert rendered.template_version == "1.1.0"
     assert [m.role for m in rendered.messages] == ["system", "user"]
     assert "the sky is blue" in rendered.messages[1].content
     assert rendered.variables_hash  # stable hash of the variables
@@ -66,12 +68,14 @@ def test_judge_template_preserves_literal_json_braces() -> None:
 
 def test_render_rejects_missing_variable() -> None:
     with pytest.raises(PromptError, match="missing="):
-        get_prompt_registry().render("grounded_answer", context="x")
+        get_prompt_registry().render("grounded_answer", summary="", history="", sources="s")
 
 
 def test_render_rejects_extra_variable() -> None:
     with pytest.raises(PromptError, match="extra="):
-        get_prompt_registry().render("grounded_answer", context="x", question="y", junk="z")
+        get_prompt_registry().render(
+            "grounded_answer", summary="", history="", sources="s", question="q", junk="z"
+        )
 
 
 def test_render_unknown_template_raises() -> None:
@@ -111,10 +115,12 @@ def test_load_rejects_duplicate_name(tmp_path: Path) -> None:
 
 
 async def test_template_version_flows_into_trace() -> None:
-    rendered = get_prompt_registry().render("grounded_answer", context="c", question="q")
+    rendered = get_prompt_registry().render(
+        "grounded_answer", summary="", history="", sources="[1] c", question="q"
+    )
     inner = FakeGateway()
     tracer = _RecordingTracer()
     ctx = GatewayContext(uuid4(), uuid4(), UsageFeature.CHAT, "req")
     await TracingGateway(inner=inner, tracer=tracer).complete(prompt=rendered, ctx=ctx)
     assert tracer.traces[0].template_name == "grounded_answer"
-    assert tracer.traces[0].template_version == "1.0.0"
+    assert tracer.traces[0].template_version == "1.1.0"

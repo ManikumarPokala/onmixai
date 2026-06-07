@@ -62,7 +62,11 @@ async def _score_case(gateway: LLMGateway, case: dict[str, str]) -> float:
     registry = get_prompt_registry()
     neutralized = InjectionFilter().neutralize(case["context"])
     answer_prompt = registry.render(
-        "grounded_answer", context=neutralized, question=case["question"]
+        "grounded_answer",
+        summary="",
+        history="",
+        sources=f"[1] {neutralized}",
+        question=case["question"],
     )
     answer = (await gateway.complete(prompt=answer_prompt, ctx=_ctx(UsageFeature.CHAT))).text
     judge_prompt = registry.render(
