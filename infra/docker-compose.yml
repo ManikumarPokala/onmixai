@@ -6,6 +6,10 @@ services:
   postgres:
     # pgvector/pgvector:pg16 = Postgres 16 + the pgvector extension (digest-pinned).
     image: pgvector/pgvector@sha256:00ba258a66dac104fd5171074a0084462a64a1369d8513f3d0a634e2f24d15bc
+    # Parallel HNSW index builds use dynamic shared memory; the 64 MB default
+    # /dev/shm is too small at 1536-dim and aborts with a DiskFullError. 1 GB is
+    # ample for the dev/benchmark corpora.
+    shm_size: "1gb"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-onmixai}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onmixai}

@@ -14,8 +14,9 @@ set -euo pipefail
 PYTEST="${PYTEST:-.venv/bin/pytest}"
 PARSER_TESTS="tests/knowledge/test_parsers.py"
 
-# Pass 1 — the full async suite, minus the parser tests. Writes a fresh .coverage.
-"$PYTEST" --cov=src -q --ignore="$PARSER_TESTS"
+# Pass 1 — the full async suite, minus the parser tests and the benchmarks (the
+# benchmarks run in their own CI job; see tests/benchmarks). Writes a fresh .coverage.
+"$PYTEST" --cov=src -q --ignore="$PARSER_TESTS" -m "not benchmark"
 
 # Pass 2 — parser tests in isolation; append coverage and enforce the gate on the total.
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 "$PYTEST" \

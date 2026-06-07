@@ -45,6 +45,7 @@ dev = [
     "mypy==2.1.0",
     "import-linter==2.11",
     "pip-audit==2.10.0",
+    "numpy==2.4.6",  # benchmark corpus generation (tests/benchmarks, ef_search sweep)
 ]
 
 [tool.setuptools.packages.find]
@@ -64,8 +65,9 @@ max-complexity = 10
 [tool.ruff.lint.per-file-ignores]
 # Operational drill/CLI scripts may print to stdout.
 "scripts/**" = ["T201"]
-# The retrieval eval reports recall@5/MRR to stdout (make eval-retrieval).
+# The retrieval eval + benchmark report metrics to stdout.
 "tests/eval/**" = ["T201"]
+"tests/benchmarks/**" = ["T201"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency-injection markers are used as argument defaults by design.
@@ -165,6 +167,9 @@ allow_indirect_imports = "true"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 filterwarnings = ["error"]
+markers = [
+    "benchmark: hot-path performance benchmark — runs in the benchmarks CI job, not the default suite",
+]
 
 [tool.coverage.run]
 source = ["src"]
