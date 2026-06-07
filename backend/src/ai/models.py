@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     Enum,
     Float,
@@ -150,6 +151,9 @@ class TokenUsagePeriod(Base):
     )
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     total_tokens: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
+    # Set once when the period first crosses the soft threshold, so the warn log +
+    # audit event fire exactly once per period (compare-and-set — Task 5).
+    soft_threshold_crossed: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
