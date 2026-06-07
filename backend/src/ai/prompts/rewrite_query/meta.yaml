@@ -1,0 +1,9 @@
+name: rewrite_query
+version: 1.0.0
+owner_feature: chat
+variables:
+  history: str
+  question: str
+body_sha256: acee707f3fcf3d9a23354443041a6e5e3489a8be644b704dbe3b33fb338d64eb
+changelog:
+  - "1.0.0: initial follow-up query rewriting (anaphora resolution, query-only output)"

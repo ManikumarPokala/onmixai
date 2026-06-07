@@ -164,6 +164,7 @@ class Settings(BaseSettings):
     chat_context_token_budget: int = 6000  # max assembled-context tokens
     chat_confidence_min_score: float = 0.0  # below → refuse before generating (Task 5)
     chat_confidence_min_results: int = 1  # fewer retrieved → refuse before generating
+    chat_rewrite_max_chars: int = 512  # cap the rewritten retrieval query (sanitization)
 
     @field_validator("jwt_secret")
     @classmethod
