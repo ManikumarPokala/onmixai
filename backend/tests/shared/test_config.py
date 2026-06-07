@@ -115,7 +115,8 @@ def test_search_tuning_knobs_present_and_typed() -> None:
     settings = _build(env="dev", database_url=VALID_DSN, jwt_secret=STRONG_SECRET)
     assert settings.search_hnsw_m == 16
     assert settings.search_hnsw_ef_construction == 64
-    assert settings.search_ef_search == 40
+    assert settings.search_ef_search == 200
+    assert settings.search_hnsw_iterative_scan == "strict_order"
     assert settings.search_top_k == 60
     assert settings.search_rrf_k == 60
     assert settings.search_fts_language == "english"

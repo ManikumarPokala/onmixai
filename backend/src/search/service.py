@@ -1,12 +1,17 @@
 """Search service — the permission-aware hybrid retrieval use case (patterns §1/§5).
 
 Composed, individually-testable steps: validate filters → embed the query → run the
-ACL-filtered vector + keyword arms concurrently → reciprocal-rank fuse → paginate →
-audit. An empty result is a normal outcome (a 200 with no rows), never an exception,
-and the query text is never logged or echoed.
-"""
+ACL-filtered vector + keyword arms → reciprocal-rank fuse → paginate → audit. An empty
+result is a normal outcome (a 200 with no rows), never an exception, and the query text
+is never logged or echoed.
 
-import asyncio
+The two arms run sequentially, not concurrently: they share one request-scoped session
+(one DB connection, which SQLAlchemy serializes anyway), and the vector arm sets a
+transaction-local ``enable_sort = off`` to force HNSW (ADR 0009) that must be restored
+before the keyword arm's ts_rank sort runs in the same transaction. True parallelism
+would require a connection per arm — a documented future optimization, unneeded for the
+hot-path budget (both arms are tens of milliseconds at 100k).
+"""
 
 from src.ai.embedding import Embedder
 from src.identity.schemas import AuthContext
@@ -40,18 +45,16 @@ class SearchService:
         filters = build_filters(query)
         embedding = (await self._embedder.embed([query.query]))[0]
         top_k = self._settings.search_top_k
-        vector, keyword = await asyncio.gather(
-            self._reader.vector_candidates(
-                actor.org_id,
-                actor.user_id,
-                embedding=embedding,
-                filters=filters,
-                top_k=top_k,
-                ef_search=self._settings.search_ef_search,
-            ),
-            self._reader.keyword_candidates(
-                actor.org_id, actor.user_id, query=query.query, filters=filters, top_k=top_k
-            ),
+        vector = await self._reader.vector_candidates(
+            actor.org_id,
+            actor.user_id,
+            embedding=embedding,
+            filters=filters,
+            top_k=top_k,
+            ef_search=self._settings.search_ef_search,
+        )
+        keyword = await self._reader.keyword_candidates(
+            actor.org_id, actor.user_id, query=query.query, filters=filters, top_k=top_k
         )
         fused = rrf_fuse([vector, keyword], k=self._settings.search_rrf_k)
         page, next_cursor = paginate(

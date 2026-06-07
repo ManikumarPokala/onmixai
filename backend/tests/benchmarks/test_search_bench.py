@@ -10,17 +10,21 @@ gate guards the end-to-end query path + budget at the test embedding dimension.
 
 import os
 import time
+from typing import Any
 from uuid import uuid4
 
 import numpy as np
 import pytest
-from sqlalchemy import insert, text
+from sqlalchemy import ClauseElement, Executable, insert, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.sql.compiler import SQLCompiler
 
 from src.identity.models import Organization, Role, User
 from src.identity.schemas import AuthContext
 from src.knowledge.models import Chunk, Collection, CollectionPermission, Document, DocumentStatus
 from src.knowledge.repository import ChunkRepository
+from src.knowledge.schemas import RetrievalFilters
 from src.knowledge.service import ChunkRetrievalService
 from src.search.schemas import SearchQuery
 from src.search.service import SearchService
@@ -36,6 +40,20 @@ _HNSW = (
     "CREATE INDEX ix_chunks_embedding_hnsw ON chunks USING hnsw (embedding vector_cosine_ops) "
     "WITH (m = 16, ef_construction = 64)"
 )
+
+
+class _Explain(Executable, ClauseElement):
+    """EXPLAIN <stmt> keeping bind params (pgvector vector doesn't render as a literal)."""
+
+    inherit_cache = False
+
+    def __init__(self, statement: Any) -> None:
+        self.statement = statement
+
+
+@compiles(_Explain, "postgresql")
+def _compile_explain(element: _Explain, compiler: SQLCompiler, **kw: Any) -> str:
+    return "EXPLAIN " + compiler.process(element.statement, **kw)
 
 
 @pytest.mark.benchmark
@@ -124,8 +142,29 @@ async def test_hybrid_search_p95_under_budget(
         latencies: list[float] = []
         async with async_sessionmaker(app, expire_on_commit=False)() as s:
             await set_tenant_context(s, org)
+            # The vector arm must actually USE the HNSW index at scale, not silently
+            # fall back to an exact Seq-Scan-then-sort (which meets the budget at 100k
+            # but is O(n) and breaks it at 1M). Assert the production plan, with the
+            # same planner steer search_vector applies (ADR 0009), is index-backed.
+            repo = ChunkRepository(s)
+            await s.execute(
+                text("SELECT set_config('hnsw.ef_search', :e, true)"),
+                {"e": str(settings.search_ef_search)},
+            )
+            await s.execute(
+                text("SELECT set_config('hnsw.iterative_scan', :i, true)"),
+                {"i": settings.search_hnsw_iterative_scan},
+            )
+            await s.execute(text("SET LOCAL enable_sort = off"))
+            probe_vec = (await embedder.embed(["probe"]))[0]
+            vstmt = repo.vector_select(org, user, probe_vec, RetrievalFilters(), 10)
+            plan = "\n".join((await s.execute(_Explain(vstmt))).scalars().all())
+            await s.execute(text("SET LOCAL enable_sort = on"))
+            assert "ix_chunks_embedding_hnsw" in plan, f"vector arm not HNSW-backed:\n{plan}"
+            assert "Seq Scan on chunks" not in plan, f"vector arm fell back to seqscan:\n{plan}"
+
             service = SearchService(
-                reader=ChunkRetrievalService(ChunkRepository(s), settings),
+                reader=ChunkRetrievalService(repo, settings),
                 embedder=embedder,
                 audit=AuditEmitter(),
                 settings=settings,

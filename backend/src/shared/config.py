@@ -91,7 +91,17 @@ class Settings(BaseSettings):
     # retrieval knobs. No magic numbers elsewhere (CLAUDE.md §3.8, §7).
     search_hnsw_m: int = 16
     search_hnsw_ef_construction: int = 64
-    search_ef_search: int = 40  # runtime HNSW probe; final default chosen in Task 7
+    # Runtime HNSW probe breadth. The Task-7 sweep showed latency is a non-constraint
+    # (ef=200 → ~11 ms p95 @ 100k/1536, ~270x under budget) and recall rises with ef;
+    # synthetic uniform vectors can't pin real recall, so we pick the recall-safest end
+    # of the grid. Real-embedding tuning on a labeled set is a revisit trigger (ADR 0009).
+    search_ef_search: int = 200
+    # Filtered-ANN scan mode (pgvector >= 0.8). The vector arm applies the org+ACL
+    # predicate before ranking, so the HNSW scan must keep fetching ordered
+    # candidates until top_k survive the filter — otherwise a partial-access user
+    # silently gets fewer than top_k. "strict_order" preserves exact distance order
+    # (RRF ranks depend on it); see ADR 0009.
+    search_hnsw_iterative_scan: str = "strict_order"
     search_top_k: int = 60  # candidates fetched per arm before fusion
     search_rrf_k: int = 60  # reciprocal-rank-fusion constant
     search_fts_language: str = "english"  # Postgres text-search config

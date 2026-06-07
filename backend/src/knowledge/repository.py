@@ -379,16 +379,33 @@ class ChunkRepository:
         filters: RetrievalFilters,
         top_k: int,
         ef_search: int,
+        iterative_scan: str,
     ) -> list[ChunkCandidate]:
         """Nearest chunks by cosine distance via the HNSW index, ACL-filtered first.
+
+        Three transaction-local planner settings make the ACL-filtered query actually
+        use the HNSW index (ADR 0009): ``hnsw.ef_search`` (probe breadth);
+        ``hnsw.iterative_scan`` (keep fetching ordered candidates until top_k survive
+        the org+ACL predicate, so a partial-access user is never silently short-changed);
+        and ``enable_sort = off`` — without it the planner mis-prices the ACL join and
+        falls back to an exact Seq-Scan-then-sort over the whole org (correct, but O(n)
+        and budget-breaking at scale) instead of the O(log n) index. ``enable_sort`` is
+        restored immediately so it never reaches the keyword arm's ts_rank sort, which
+        shares this transaction (the arms run sequentially — see SearchService).
 
         Time: O(log n) HNSW probe + O(top_k). Space: O(top_k). n = org's chunks.
         """
         await self._session.execute(
             text("SELECT set_config('hnsw.ef_search', :ef, true)"), {"ef": str(ef_search)}
         )
+        await self._session.execute(
+            text("SELECT set_config('hnsw.iterative_scan', :it, true)"), {"it": iterative_scan}
+        )
+        await self._session.execute(text("SET LOCAL enable_sort = off"))
         stmt = self.vector_select(org_id, user_id, embedding, filters, top_k)
-        return [_to_candidate(row) for row in (await self._session.execute(stmt)).all()]
+        rows = (await self._session.execute(stmt)).all()
+        await self._session.execute(text("SET LOCAL enable_sort = on"))
+        return [_to_candidate(row) for row in rows]
 
     async def search_keyword(
         self,

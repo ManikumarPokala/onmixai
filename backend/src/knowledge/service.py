@@ -351,7 +351,13 @@ class ChunkRetrievalService:
         ef_search: int,
     ) -> list[ChunkCandidate]:
         return await self._chunks.search_vector(
-            org_id, user_id, embedding=embedding, filters=filters, top_k=top_k, ef_search=ef_search
+            org_id,
+            user_id,
+            embedding=embedding,
+            filters=filters,
+            top_k=top_k,
+            ef_search=ef_search,
+            iterative_scan=self._settings.search_hnsw_iterative_scan,
         )
 
     async def keyword_candidates(

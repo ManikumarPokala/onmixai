@@ -137,6 +137,32 @@ async def test_keyword_arm_reaches_chunks_by_index(
     assert "Seq Scan on chunks" not in plan  # index-backed, never a sequential scan
 
 
+async def test_ef_search_guc_applies_in_transaction(
+    repo_and_ids: tuple[ChunkRepository, UUID, UUID, FakeEmbedder], db_session: AsyncSession
+) -> None:
+    # The vector arm sets hnsw.ef_search per query with set_config(..., is_local=>true).
+    # SET LOCAL only holds within the SAME transaction on the SAME connection — a future
+    # pooling/session refactor could silently detach it, leaving every query at the index
+    # default and any ef_search tuning measuring nothing. Guard it: after the real
+    # search_vector path runs, SHOW (same transaction) must echo the configured value.
+    repo, org_id, user_id, embedder = repo_and_ids
+    probe = 123  # distinct from the pgvector default (40) and our search_ef_search (40)
+    await repo.search_vector(
+        org_id,
+        user_id,
+        embedding=embedder._vector("alpha beta"),
+        filters=RetrievalFilters(),
+        top_k=5,
+        ef_search=probe,
+        iterative_scan="strict_order",
+    )
+    shown = (await db_session.execute(text("SHOW hnsw.ef_search"))).scalar_one()
+    assert int(shown) == probe  # GUC reached the query's transaction; not the index default
+    # enable_sort is forced off to steer the planner onto HNSW, then restored — so it
+    # never reaches the keyword arm's ts_rank sort, which shares this transaction.
+    assert (await db_session.execute(text("SHOW enable_sort"))).scalar_one() == "on"
+
+
 async def test_gin_fulltext_index_exists_on_content_tsv(db_session: AsyncSession) -> None:
     # The GIN index that serves the keyword arm's @@ predicate is present and built
     # on the tsvector column (it wins on cost at corpus scale — Task 7).
