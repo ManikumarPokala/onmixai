@@ -65,6 +65,27 @@ which returns deterministic 1536-dim vectors, so the pipeline runs locally with 
 API key. Point at a real provider by exporting `EMBEDDING_BASE_URL` /
 `EMBEDDING_API_KEY` (its vector width must equal `EMBEDDING_DIMENSION`).
 
+### Searching documents
+
+Once documents are `ready`, `POST /api/v1/search` runs permission-aware hybrid
+retrieval — a pgvector HNSW vector arm + a Postgres FTS keyword arm, fused with
+Reciprocal Rank Fusion, filtered by org_id + collection ACLs inside the SQL
+predicate before ranking ([ADR 0009](docs/adr/0009-hybrid-retrieval-hnsw-fts-rrf.md),
+[ADR 0010](docs/adr/0010-permission-aware-retrieval-boundary.md);
+[`src/search/README.md`](backend/src/search/README.md)):
+
+```bash
+curl -X POST localhost:8008/api/v1/search \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"query": "quarterly revenue", "collection_id": "<uuid>", "limit": 10}'
+# -> {"results": [{"chunk_id", "content", "score", "source": {...}}, ...], "next_cursor": 10}
+```
+
+Optional filters (`collection_id`, `content_type`, `created_after`/`created_before`)
+only narrow the ACL, never widen it; an empty result is a normal `200`. Retrieval
+tuning and re-indexing are covered in
+[the reindex runbook](docs/runbooks/reindex-embeddings.md).
+
 ### Local ports (non-default by design)
 
 To avoid colliding with common local services, the dev stack publishes on

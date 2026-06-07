@@ -112,6 +112,40 @@ against a real embedding model on a labeled set is a later, separately-gated add
 - A parallel HNSW build needs > a default container's 64 MB `/dev/shm`; dev compose
   sets `shm_size: 1gb` and the benchmark builds serially (small at test dim).
 
+## Operational hazards & follow-ups
+
+**`enable_sort = off` is a planner-coercion hammer.** It is a transaction-local
+`SET LOCAL` scoped to the vector arm, restored to `on` before the keyword arm. It
+works because the vector arm's *only* sort need is the distance order, which the
+HNSW index supplies — so coercing the sort away leaves the index as the only path.
+**Hazard:** any future change to the vector arm's query shape — a second `ORDER BY`,
+keyset/offset pagination, an extra join, a `GROUP BY` — can introduce a sort that
+*does* need a real sort node, which `enable_sort = off` would then wrongly suppress
+or mis-plan. Such a change MUST re-examine this setting. The benchmark's
+HNSW-plan-assertion (`Seq Scan on chunks` / no `ix_chunks_embedding_hnsw` fails CI)
+is the tripwire that catches a regression in either direction. Gentler alternatives
+were tried and rejected on evidence: `hnsw.iterative_scan` alone does **not** change
+the planner's choice (it only governs an already-chosen index scan); the
+`document_id IN (SELECT … allowed docs …)` restructure keeps chunks the driving
+relation but the planner flips back to the exact sort at **`ef_search ≥ 40`** (the
+HNSW cost rises with `ef`), so it is not robust at the configured probe (200).
+
+**Root cause vs. symptom.** The underlying disease is the planner's row
+**mis-estimate on the ACL join** (estimate `rows=250` vs actual `rows=100000`); the
+exact top-N sort only looks cheap because the planner thinks the candidate set is
+tiny. `enable_sort = off` treats the *symptom* deterministically. The estimate-side
+fix — `CREATE STATISTICS` (extended/multi-column statistics) over the chunks
+ACL-predicate columns so the planner prices the join correctly and may choose HNSW
+unaided — is recorded as a backlog item (`docs/backlog.md`), not this sprint; if it
+lands, re-test whether the coercion is still needed and remove it if not.
+
+**Parallel arms (deferred).** The two arms run sequentially on one connection so the
+vector arm's `enable_sort` toggle cannot bleed into the keyword arm's `ts_rank`
+sort. If hybrid latency ever needs the arms truly concurrent, the path is **a
+session per arm** (a connection each): that isolates each arm's connection-local
+GUCs and removes the `enable_sort` set/restore dance entirely. Unneeded now (both
+arms are tens of ms at 100k; one `AsyncSession` serializes queries anyway).
+
 **Revisit triggers** (re-tune `ef_search`/`m`, or move to a dedicated vector store):
 - corpus exceeds **~5M chunks**, or
 - production hybrid **p95 > 2s**, or
