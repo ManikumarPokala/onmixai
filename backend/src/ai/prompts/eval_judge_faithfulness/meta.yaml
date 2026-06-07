@@ -1,0 +1,10 @@
+name: eval_judge_faithfulness
+version: 1.0.0
+owner_feature: eval
+variables:
+  question: str
+  context: str
+  answer: str
+body_sha256: 687d8d308f77b08c647bd07ea86e6a85c93a91391921e8c502fee984ae0e8487
+changelog:
+  - "1.0.0: initial faithfulness LLM-as-judge rubric (JSON score + reason)"

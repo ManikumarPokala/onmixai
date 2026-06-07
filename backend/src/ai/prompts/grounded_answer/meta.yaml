@@ -1,0 +1,9 @@
+name: grounded_answer
+version: 1.0.0
+owner_feature: chat
+variables:
+  context: str
+  question: str
+body_sha256: d2c8423ac81f9cb2007e5fdec39d886659de6a4d2be0afcb9c3ec22952a4f872
+changelog:
+  - "1.0.0: initial grounded-answer template (cite-or-refuse)"
