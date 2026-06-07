@@ -137,6 +137,26 @@ async def test_provider_rejection_not_retried_and_no_fallback() -> None:
     assert len(fake.calls) == 1  # rejected on the first attempt; no retry, no fallback
 
 
+async def test_http_408_request_timeout_is_retryable() -> None:
+    # 408 is a 4xx but semantically a timeout — retried like 429/5xx, not rejected.
+    timeout_408 = litellm.APIError(408, "Request Timeout", llm_provider="openai", model="m")
+    fake = _FakeAcompletion([timeout_408, _resp("recovered")])
+    gw = _gateway(llm_settings("http://x", retries=1), fake)
+    completion = await gw.complete(prompt=_prompt(), ctx=_ctx())
+    assert completion.text == "recovered"
+    assert len(fake.calls) == 2  # retried after the 408, not rejected on attempt 1
+
+
+def test_worst_case_bound_includes_attempts_and_backoff() -> None:
+    # The "never hangs" ceiling counts attempt timeouts AND inter-retry backoff.
+    settings = llm_settings("http://x", retries=2, timeout=5)  # base 0.01, max 0.05
+    gw = _gateway(settings, _FakeAcompletion())
+    backoff = min(0.05, 0.01 * 1) + min(0.05, 0.01 * 2)  # two backoffs: 0.01 + 0.02
+    expected = 2 * ((2 + 1) * 5 + backoff)  # chain × (attempts_ceiling + backoff) = 30.06
+    assert gw.worst_case_wall_clock_seconds(2) == pytest.approx(expected)
+    assert gw.worst_case_wall_clock_seconds(2) > 2 * (2 + 1) * 5  # strictly > attempts-only
+
+
 # --- structured output ---
 
 

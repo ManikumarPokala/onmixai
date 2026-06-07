@@ -75,11 +75,25 @@ class LiteLLMGateway:
         self._rng = rng or Random()
 
     def worst_case_wall_clock_seconds(self, chain_length: int) -> float:
-        """Upper bound on ``complete`` wall clock: every model in the chain times out on
-        every attempt. 'Never hangs' is this number, not an observation."""
-        return float(
-            chain_length * (self._settings.llm_max_retries + 1) * self._settings.llm_timeout_seconds
+        """Mathematically complete upper bound on ``complete`` wall clock — both the
+        attempt timeouts AND the inter-retry backoff are counted, so 'never hangs' holds
+        for any config, not just today's small backoff:
+
+            chain × (retries+1) × timeout  +  chain × Σ_{i=0..retries-1} backoff_ceiling(i)
+
+        where backoff_ceiling(i) = min(backoff_max, backoff_base × 2^i) is the full-jitter
+        ceiling of the i-th backoff (there are ``retries`` backoffs per model). O(retries).
+        """
+        retries = self._settings.llm_max_retries
+        attempts_ceiling = (retries + 1) * self._settings.llm_timeout_seconds
+        backoff_ceiling = sum(
+            min(
+                self._settings.llm_backoff_max_seconds,
+                self._settings.llm_backoff_base_seconds * (2**i),
+            )
+            for i in range(retries)
         )
+        return float(chain_length * (attempts_ceiling + backoff_ceiling))
 
     async def complete(
         self,
@@ -158,7 +172,9 @@ class LiteLLMGateway:
                 await self._sleep(self._backoff(attempt))
             except litellm.APIError as exc:
                 status = getattr(exc, "status_code", None)
-                if status is not None and 400 <= status < 500 and status != 429:
+                # 4xx is the caller's fault → reject, EXCEPT 408 (request timeout) and
+                # 429 (rate limit), which are transient and retryable like 5xx.
+                if status is not None and 400 <= status < 500 and status not in (408, 429):
                     raise UpstreamRejectedError(detail=str(exc)) from exc
                 if attempt >= retries:
                     raise UpstreamUnavailableError(detail=str(exc)) from exc

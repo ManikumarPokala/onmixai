@@ -99,8 +99,8 @@ async def main() -> int:
         except UpstreamUnavailableError:
             outcome = "UpstreamUnavailableError (503)"
         elapsed = time.monotonic() - started
-        print(f"[drill 2] all down: bound={bound:.1f}s  raised {outcome} in {elapsed:.3f}s "
-              f"(< bound={elapsed < bound})  provider_calls={len(stub.REQUEST_LOG)}")
+        print(f"[drill 2] all down: bound={bound:.2f}s (attempts+backoff)  raised {outcome} "
+              f"in {elapsed:.3f}s (< bound={elapsed < bound})  provider_calls={len(stub.REQUEST_LOG)}")
 
         # Drill 3 — circuit opens after threshold, then SKIPS without a provider call.
         stub.REQUEST_LOG.clear()

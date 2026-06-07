@@ -116,6 +116,39 @@ def test_drill_circuit_half_open_recovers_then_can_reopen() -> None:
     assert reopen.allow("m") is False
 
 
+def test_circuit_breaker_isolates_keys_per_provider_model() -> None:
+    # One dead model must not open its siblings' circuits (per provider-model key).
+    breaker = CircuitBreaker(failure_threshold=2, reset_seconds=60)
+    breaker.record_failure("openai/modelA")
+    breaker.record_failure("openai/modelA")
+    assert breaker.state("openai/modelA") == CircuitState.OPEN
+    assert breaker.allow("openai/modelA") is False
+    assert breaker.state("openai/modelB") == CircuitState.CLOSED  # sibling unaffected
+    assert breaker.allow("openai/modelB") is True
+
+
+async def test_open_circuit_on_one_model_does_not_block_the_chain(
+    llm_stub: SimpleNamespace,
+) -> None:
+    # A model whose circuit is already OPEN is skipped, and the fallback chain's other
+    # entries still run — isolation between keys, end to end through the adapter.
+    breaker = CircuitBreaker(failure_threshold=1, reset_seconds=60)
+    breaker.record_failure("openai/afail")  # pre-open A's circuit
+    settings = llm_settings(
+        llm_stub.base_url,
+        default_model="openai/afail",
+        fallback_chain=["openai/okmodel"],
+        retries=0,
+        threshold=1,
+    )
+    gateway = LiteLLMGateway(settings=settings, configs=NoModelConfig(), breaker=breaker)
+    completion = await gateway.complete(prompt=_prompt(), ctx=_ctx())
+    assert completion.model_used == "openai/okmodel"  # fallback ran despite A being open
+    models = [r["model"] for r in llm_stub.module.REQUEST_LOG]
+    assert not any("afail" in m for m in models)  # A skipped — no provider call
+    assert any("okmodel" in m for m in models)
+
+
 async def test_drill_no_retry_on_provider_rejection(llm_stub: SimpleNamespace) -> None:
     settings = llm_settings(
         llm_stub.base_url,
