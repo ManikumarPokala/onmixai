@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 # Import the metadata and every model module so all tables register on Base.
+from src.ai import models as ai_models  # noqa: F401
 from src.identity import models  # noqa: F401
 from src.knowledge import models as knowledge_models  # noqa: F401
 from src.shared.database import Base
