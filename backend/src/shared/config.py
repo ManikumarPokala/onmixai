@@ -26,6 +26,22 @@ DENYLISTED_SECRETS: frozenset[str] = frozenset(
 
 MIN_JWT_SECRET_LENGTH = 32
 
+# Substrings that mark a URL as a local/dev/stub endpoint — forbidden for LLM
+# providers in production (a stub or localhost endpoint in prod is a misconfiguration,
+# not a fallback). Time: O(markers) membership over a lowercased URL.
+_LOCAL_URL_MARKERS: tuple[str, ...] = (
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "-stub",
+    "host.docker.internal",
+)
+
+
+def _is_local_or_stub_url(url: str) -> bool:
+    lowered = url.lower()
+    return any(marker in lowered for marker in _LOCAL_URL_MARKERS)
+
 
 class Settings(BaseSettings):
     """Application settings loaded from the environment / ``.env``.
@@ -107,6 +123,33 @@ class Settings(BaseSettings):
     search_fts_language: str = "english"  # Postgres text-search config
     search_max_results: int = 50  # hard server-side page cap
 
+    # AI / LLM gateway (Phase 3). The single source for provider routing and
+    # resilience; the adapter is the only consumer (CLAUDE.md §3.6, §3.8).
+    llm_default_model: str = "openai/gpt-4o-mini"
+    # Ordered model refs tried after the default fails. Empty is fine in dev/test;
+    # a prod guard requires it non-empty (no single point of failure in prod).
+    llm_fallback_chain: list[str] = []
+    llm_timeout_seconds: int = 30
+    llm_max_retries: int = 2
+    llm_circuit_failure_threshold: int = 5
+    llm_circuit_reset_seconds: int = 60
+    # OpenAI-compatible endpoint override (dev → llm-stub). Per-provider keys are
+    # optional: an absent provider key means that provider is unavailable for any
+    # chain (enforced in the adapter, Task 4) — never a silent unauthenticated call.
+    llm_base_url: str | None = None
+    llm_api_key: SecretStr | None = None
+    openai_api_key: SecretStr | None = None
+    anthropic_api_key: SecretStr | None = None
+    azure_api_key: SecretStr | None = None
+
+    # Tracing (Phase 3). `logging` is dev-complete; `langfuse` for prod. Using the
+    # logging exporter in prod is a deliberate opt-in (a prod guard requires it).
+    tracing_exporter: Literal["logging", "langfuse"] = "logging"
+    tracing_logging_allowed_in_prod: bool = False
+    langfuse_public_key: SecretStr | None = None
+    langfuse_secret_key: SecretStr | None = None
+    langfuse_host: str | None = None
+
     @field_validator("jwt_secret")
     @classmethod
     def _jwt_secret_long_enough(cls, value: SecretStr) -> SecretStr:
@@ -144,6 +187,45 @@ class Settings(BaseSettings):
             raise ValueError(
                 "INGEST_CHAOS_DELAY_SECONDS must be 0 when ENV=prod (fault injection "
                 "is not allowed in production)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _reject_stub_llm_endpoint_in_prod(self) -> "Settings":
+        """A stub/localhost LLM endpoint must be structurally impossible in prod.
+
+        Time: O(1). Space: O(1).
+        """
+        if self.env == "prod" and self.llm_base_url and _is_local_or_stub_url(self.llm_base_url):
+            raise ValueError(
+                "LLM_BASE_URL must not point at a stub/localhost endpoint when ENV=prod"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _require_llm_fallback_chain_in_prod(self) -> "Settings":
+        """Production must have a fallback chain (no single point of failure).
+
+        Time: O(1). Space: O(1).
+        """
+        if self.env == "prod" and not self.llm_fallback_chain:
+            raise ValueError("LLM_FALLBACK_CHAIN must be non-empty when ENV=prod")
+        return self
+
+    @model_validator(mode="after")
+    def _require_explicit_logging_tracer_in_prod(self) -> "Settings":
+        """The logging tracer in prod must be a deliberate opt-in, not the default.
+
+        Time: O(1). Space: O(1).
+        """
+        if (
+            self.env == "prod"
+            and self.tracing_exporter == "logging"
+            and not self.tracing_logging_allowed_in_prod
+        ):
+            raise ValueError(
+                "tracing_exporter='logging' in prod requires "
+                "TRACING_LOGGING_ALLOWED_IN_PROD=true (deliberate opt-in)"
             )
         return self
 

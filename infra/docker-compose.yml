@@ -78,6 +78,10 @@ services:
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-1536}
       INGEST_CHAOS_DELAY_SECONDS: ${INGEST_CHAOS_DELAY_SECONDS:-0}
       INGEST_STUCK_AFTER_SECONDS: ${INGEST_STUCK_AFTER_SECONDS:-1800}
+      # LLM gateway (Phase 3). Defaults target the dev-only llm-stub (deterministic,
+      # no account); point at a real OpenAI-compatible endpoint to use a real model.
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm-stub:8000/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-dev-stub-no-auth}
     # Host port defaults to 8008 (8000 is commonly occupied); container stays 8000.
     ports:
       - "${API_HOST_PORT:-8008}:8000"
@@ -87,6 +91,8 @@ services:
       minio:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      llm-stub:
         condition: service_healthy
 
   worker:
@@ -121,6 +127,24 @@ services:
       - ./dev/embeddings_stub.py:/app/embeddings_stub.py:ro
     ports:
       - "${EMBEDDINGS_STUB_HOST_PORT:-9120}:8000"
+    healthcheck:
+      test:
+        ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  llm-stub:
+    # DEV ONLY. OpenAI-compatible chat-completions endpoint returning deterministic
+    # echo-derived completions (with header-driven fault injection for resilience
+    # drills), so the gateway + adapter run end-to-end with no external account.
+    # Never used outside local dev.
+    image: python:3.12-slim
+    command: ["python", "/app/llm_stub.py"]
+    volumes:
+      - ./dev/llm_stub.py:/app/llm_stub.py:ro
+    ports:
+      - "${LLM_STUB_HOST_PORT:-9130}:8000"
     healthcheck:
       test:
         ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
