@@ -5,19 +5,28 @@ end-to-end with no external account or cost, and so eval scores are repeatable.
 Implements ``POST /v1/chat/completions`` and ``GET /health``. Standard library
 only; never deployed outside local dev. Not part of the product.
 
-Fault injection (for the resilience + timeout drills, Task 4) via request headers:
-- ``X-Stub-Fail: 1``    → respond 503 (a retryable upstream failure).
-- ``X-Stub-Status: 400``→ respond with that exact status (e.g. a non-retryable 4xx).
-- ``X-Stub-Delay-Ms: N``→ sleep N ms before responding (to trip client timeouts).
+Fault injection (for the resilience + timeout drills, Task 4):
+- by header — ``X-Stub-Fail: 1`` → 503; ``X-Stub-Status: 400`` → that status;
+  ``X-Stub-Delay-Ms: N`` → sleep N ms (to trip client timeouts).
+- by model name — a model containing ``fail`` → 503 (retryable), ``reject`` → 400
+  (non-retryable). This lets a multi-model fallback chain fail specific entries
+  without per-request header plumbing through the client.
+
+``REQUEST_LOG`` records every chat request's model so a test can prove how many
+attempts reached the provider (e.g. that an open circuit skipped a model). It is
+dev/test observability only — tests clear it; never used by the product.
 """
 
 import json
 import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 
 # Fixed so a completion is byte-identical across runs (deterministic eval scores).
 _CREATED = 1_700_000_000
+
+REQUEST_LOG: list[dict[str, Any]] = []
 
 
 def _word_count(text: str) -> int:
@@ -60,6 +69,11 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(404, {"error": {"message": "not found"}})
             return
 
+        length = int(self.headers.get("Content-Length", "0"))
+        payload = json.loads(self.rfile.read(length) or b"{}")
+        model = str(payload.get("model", ""))
+        REQUEST_LOG.append({"model": model})
+
         delay_ms = int(self.headers.get("X-Stub-Delay-Ms", "0") or "0")
         if delay_ms:
             time.sleep(delay_ms / 1000.0)
@@ -67,12 +81,13 @@ class _Handler(BaseHTTPRequestHandler):
             code = int(self.headers["X-Stub-Status"])
             self._json(code, {"error": {"message": f"stub injected status {code}", "type": "stub"}})
             return
-        if self.headers.get("X-Stub-Fail") == "1":
+        if self.headers.get("X-Stub-Fail") == "1" or "fail" in model:
             self._json(503, {"error": {"message": "stub injected failure", "type": "stub"}})
             return
+        if "reject" in model:
+            self._json(400, {"error": {"message": "stub injected rejection", "type": "stub"}})
+            return
 
-        length = int(self.headers.get("Content-Length", "0"))
-        payload = json.loads(self.rfile.read(length) or b"{}")
         content = _completion_text(payload)
         prompt_tokens = sum(
             _word_count(str(m.get("content", ""))) for m in payload.get("messages", [])

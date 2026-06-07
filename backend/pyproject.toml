@@ -31,6 +31,7 @@ dependencies = [
     "charset-normalizer==3.4.7",
     "pytesseract==0.3.13",
     "openai==2.41.0",
+    "litellm==1.88.0",
 ]
 
 [project.optional-dependencies]
@@ -103,7 +104,7 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # Parser libraries are partially/incompletely typed — treat as untyped (Any).
-module = ["pymupdf.*", "fitz.*", "docx.*", "pptx.*", "pytesseract.*", "openpyxl.*"]
+module = ["pymupdf.*", "fitz.*", "docx.*", "pptx.*", "pytesseract.*", "openpyxl.*", "litellm.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 

@@ -131,8 +131,13 @@ class Settings(BaseSettings):
     llm_fallback_chain: list[str] = []
     llm_timeout_seconds: int = 30
     llm_max_retries: int = 2
+    # Exponential backoff with full jitter between retries of one model. The worst-case
+    # wall clock is bounded (chain × (retries+1) × timeout) so the gateway never hangs.
+    llm_backoff_base_seconds: float = 0.5
+    llm_backoff_max_seconds: float = 8.0
     llm_circuit_failure_threshold: int = 5
     llm_circuit_reset_seconds: int = 60
+    llm_temperature_default: float = 0.7
     # OpenAI-compatible endpoint override (dev → llm-stub). Per-provider keys are
     # optional: an absent provider key means that provider is unavailable for any
     # chain (enforced in the adapter, Task 4) — never a silent unauthenticated call.

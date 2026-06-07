@@ -70,7 +70,15 @@ def test_dev_allows_denylisted_secret() -> None:
 
 
 def test_prod_accepts_unique_secret() -> None:
-    settings = _build(env="prod", database_url=VALID_DSN, jwt_secret=STRONG_SECRET)
+    # A prod-valid config also needs a fallback chain and a non-logging tracer
+    # (Phase-3 prod guards); here we assert a unique secret is accepted.
+    settings = _build(
+        env="prod",
+        database_url=VALID_DSN,
+        jwt_secret=STRONG_SECRET,
+        llm_fallback_chain=["openai/gpt-4o-mini"],
+        tracing_exporter="langfuse",
+    )
     assert settings.env == "prod"
 
 

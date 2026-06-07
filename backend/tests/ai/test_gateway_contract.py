@@ -8,6 +8,8 @@ from uuid import uuid4
 
 import pytest
 
+from src.ai.adapters.circuit_breaker import CircuitBreaker
+from src.ai.adapters.litellm_gateway import LiteLLMGateway
 from src.ai.gateway import (
     ChatMessage,
     GatewayContext,
@@ -17,6 +19,7 @@ from src.ai.gateway import (
     UpstreamUnavailableError,
 )
 from src.ai.models import UsageFeature
+from tests.ai.conftest import NoModelConfig, llm_settings
 from tests.fakes.fake_gateway import FakeGateway
 
 _MODEL = ModelRef("openai/gpt-4o-mini")
@@ -37,13 +40,20 @@ def _ctx() -> GatewayContext:
     )
 
 
-@pytest.fixture(params=["fake"])
+@pytest.fixture(params=["fake", "litellm"])
 def gateway(request: pytest.FixtureRequest) -> Iterator[LLMGateway]:
-    # Task 4 adds "litellm" here (a real adapter against llm-stub) — same assertions.
+    # The same contract assertions run against the scriptable fake AND the real
+    # litellm adapter pointed at the in-process stub.
     if request.param == "fake":
         yield FakeGateway()
-    else:  # pragma: no cover - added in Task 4
-        raise NotImplementedError(request.param)
+    else:
+        stub = request.getfixturevalue("llm_stub")
+        gateway = LiteLLMGateway(
+            settings=llm_settings(stub.base_url),
+            configs=NoModelConfig(),
+            breaker=CircuitBreaker(failure_threshold=5, reset_seconds=60),
+        )
+        yield gateway
 
 
 async def test_complete_returns_reconciling_attributed_completion(gateway: LLMGateway) -> None:
