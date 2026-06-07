@@ -3,9 +3,10 @@
 Bulk-loads a corpus (BENCH_CHUNKS, default 100k) via the pgvector fast path (drop
 the HNSW index, insert, rebuild once, ANALYZE) and asserts the hybrid /search p95
 is under budget. Marked ``benchmark`` so it runs only in the benchmarks CI job, not
-the default suite. The realistic-dimension (1536) p95 + ef_search recall table are
-measured offline by scripts/drills/ef_search_sweep.py and recorded in ADR 0009; this
-gate guards the end-to-end query path + budget at the test embedding dimension.
+the default suite. This dim=8 number is a REGRESSION TRIPWIRE — it asserts the
+production plan stays HNSW-backed and p95 < 3 s — NOT the production capacity figure.
+The canonical capacity evidence is the 1536-dim sweep (scripts/drills/ef_search_sweep.py,
+recorded in ADR 0009); the dim=8 benchmark trades realism for CI speed (ADR 0009).
 """
 
 import os

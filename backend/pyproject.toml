@@ -179,6 +179,7 @@ testpaths = ["tests"]
 filterwarnings = ["error"]
 markers = [
     "benchmark: hot-path performance benchmark — runs in the benchmarks CI job, not the default suite",
+    "generation: generation golden-set eval — runs in the eval-generation job (make eval-generation), not the retrieval eval",
 ]
 
 [tool.coverage.run]

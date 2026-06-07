@@ -1,0 +1,22 @@
+{"question": "What is OnMixAI's data retention period?", "context": "OnMixAI retains customer documents for 90 days after deletion before permanent purge."}
+{"question": "Which embedding model does the platform use by default?", "context": "The default embedding model is text-embedding-3-small at 1536 dimensions."}
+{"question": "How many documents can a free-tier org upload?", "context": "Free-tier organizations may upload up to 500 documents."}
+{"question": "What database powers retrieval?", "context": "Retrieval is served by PostgreSQL with the pgvector extension for vector search."}
+{"question": "What is the hybrid search p95 latency budget?", "context": "The hybrid search hot-path budget is a p95 under 3 seconds at 100k chunks."}
+{"question": "Which fusion method combines the two retrieval arms?", "context": "The vector and keyword arms are combined using Reciprocal Rank Fusion with k=60."}
+{"question": "What happens when all LLM providers are down?", "context": "If every provider in the fallback chain is unavailable, the gateway returns a typed 503 within a bounded time."}
+{"question": "How is a token budget enforced?", "context": "A hard token cap blocks the next call with a typed 4xx before any provider request is made."}
+{"question": "What guardrail protects against prompt injection?", "context": "Retrieved content is wrapped in nonce-delimited data markers framed as data, not instructions."}
+{"question": "Which roles exist for organization members?", "context": "Organization members can hold the OWNER, ADMIN, or MEMBER role."}
+{"question": "How long is an access token valid?", "context": "Access tokens are short-lived and expire after 15 minutes."}
+{"question": "What index serves the vector arm?", "context": "The vector arm uses a pgvector HNSW index with cosine distance."}
+{"question": "What index serves the keyword arm?", "context": "The keyword arm uses a Postgres GIN index over a generated tsvector column."}
+{"question": "What is the soft budget threshold default?", "context": "The soft budget threshold defaults to 80 percent of the hard limit and warns once per period."}
+{"question": "How are retries bounded?", "context": "Each model is retried up to llm_max_retries times with exponential backoff and full jitter."}
+{"question": "What triggers a circuit breaker to open?", "context": "A provider-model whose failures reach the threshold opens its circuit and is skipped until the reset window elapses."}
+{"question": "Where are prompt templates stored?", "context": "Prompt templates are versioned in-repo under src/ai/prompts, not in the database."}
+{"question": "What is redacted by the PII filter?", "context": "The PII redactor removes emails, phone numbers, and government-id formats, recording only counts."}
+{"question": "How is tenant isolation enforced at the database?", "context": "Every tenant table has forced Row-Level Security keyed on org_id under a non-bypassrls role."}
+{"question": "What does the worker do on a poison document?", "context": "A pathological document fails its own ingestion task with a terminal FAILED state and reason, never the worker fleet."}
+{"question": "Which storage backend holds uploaded files?", "context": "Uploaded files are streamed to S3-compatible object storage (MinIO in local development)."}
+{"question": "What is the chunk token target?", "context": "Documents are chunked to a target of 512 whitespace tokens with 64 tokens of overlap."}

@@ -60,3 +60,50 @@ worst_case_wall_clock_seconds(chain_length) =
 The first term is the attempt timeouts; the second is the full-jitter ceiling of the
 `retries` backoffs per model (full jitter draws in `[0, ceiling]`, so the ceiling is the
 bound). The all-providers-down drill asserts actual termination is under this value.
+
+## Metering & budgets (`metering.py`, ADR 0012)
+
+`MeteringGateway` decorates the gateway so token counting and budgets live in exactly
+one place. **Pre-call:** an O(1) read of the materialized period total vs the org budget;
+over the hard limit → `BudgetExceededError` (429) *before any provider call*. **Post-call:**
+an immutable `token_usage_events` row + an atomic UPSERT-increment of the period total,
+in the request's transaction. **Semantics:** the cap blocks *subsequent* calls — an
+in-flight call finishes and is recorded exactly (a request may push slightly over; the
+next is blocked; no mid-stream truncation). Failed/fallback calls meter nothing. The
+reconciliation invariant `Σ events == period total == Σ provider usage` holds in
+aggregate and per `trace_id`. Soft-threshold crossings warn + audit once per period
+(compare-and-set).
+
+## Tracing (`tracing.py`)
+
+`TracingGateway` emits exactly one trace per call — success and each typed failure —
+carrying template name+version, model, token counts, latency, `source_chunk_ids`,
+`finish_reason`, and error class. `trace_id` is the join key to the usage event.
+Exporters: `LoggingTracer` (structlog, dev) and `LangfuseTracer` (the only langfuse-
+importing module). The full stack is composed once: **tracing → metering → adapter**
+(`build_metered_traced_gateway`) — features cannot bypass any layer.
+
+## Guardrails (`guardrails/`, CLAUDE.md §4)
+
+Composed steps, assembled declaratively **per feature**:
+
+| Direction | Step | What |
+|---|---|---|
+| inbound | `PIIRedactor` | per-org opt-in; email/gov-id/phone → `[REDACTED_*]`; returns **counts only** (values never logged/traced) |
+| inbound | `InjectionFilter` | structural: wrap retrieved content in **nonce-delimited** `<<UNTRUSTED_DATA_{nonce}>>` markers + a "data, not instructions" frame; forging the close marker is impossible (nonce) and literal marker tokens are escaped (defense in depth) |
+| outbound | `OutboundGuardrails.validate_structured` | a response that ignored the required schema (obeyed an injection) → `GuardrailViolationError` → `Refusal` |
+
+Per-feature chains: chat / report / recommendation = `(pii_redactor, injection_filter)`;
+**eval = `(injection_filter,)`**. `guardrails_applied` + `redaction_counts` are logged
+into the trace (counts only).
+
+### Eval-chain PII exemption — a constraint, not a gap
+
+The eval feature **skips PII redaction** on purpose: the faithfulness judge must score
+the *real* answer, and redacting it would corrupt the judgment. This is only safe because
+**eval inputs are synthetic or pre-redacted** — golden sets and the deterministic stub
+(ADR 0013), never live user content. **Therefore: eval traffic must never carry real user
+PII to an external provider.** Any future "eval against production transcripts" idea must
+pre-redact at the source (or run against a self-hosted model); the exemption is enforced
+by *where eval data comes from*, and must stay that way.
+

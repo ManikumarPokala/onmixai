@@ -97,6 +97,14 @@ against a real embedding model on a labeled set is a later, separately-gated add
 
 ## Consequences
 
+- **Which number is the capacity evidence.** The **1536-dim, 100k-chunk sweep**
+  (`scripts/drills/ef_search_sweep.py`, table above, p95 ≤ 11 ms) is the canonical
+  production capacity figure. The CI benchmark (`tests/benchmarks/test_search_bench.py`)
+  runs at **dim=8** for speed and reports a different, smaller number (~18 ms @ 100k);
+  that number is a **regression tripwire** (it asserts the production plan is
+  HNSW-backed and p95 < 3 s), **not** the production latency. Read the dim=8 benchmark
+  as "the index path still works and is fast," and the 1536-dim sweep as "this is the
+  real capacity."
 - The vector arm is now O(log n): ~2–15 ms p50 @ 100k/1536 on a laptop container
   (vs ~440 ms for the prior exact scan), and it scales sub-linearly toward 1M.
 - `enable_sort = off` is a deliberate, documented planner directive scoped to the

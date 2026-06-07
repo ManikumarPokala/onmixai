@@ -41,10 +41,15 @@ def _last_user_content(messages: list[dict]) -> str:
 
 
 def _completion_text(payload: dict) -> str:
-    """Deterministic, echo-derived answer. If JSON mode is requested, return a JSON
-    object string so the adapter's structured-output path has something valid."""
-    user = _last_user_content(payload.get("messages", []))
+    """Deterministic, echo-derived answer. In JSON mode, return a valid object: a
+    faithfulness score for an eval-judge prompt (so the generation-eval harness gets a
+    deterministic, repeatable score), otherwise an echo answer object."""
+    messages = payload.get("messages", [])
+    user = _last_user_content(messages)
     if (payload.get("response_format") or {}).get("type") == "json_object":
+        joined = " ".join(str(m.get("content", "")) for m in messages).lower()
+        if "faithfulness" in joined:
+            return json.dumps({"faithfulness": 1.0, "reason": "deterministic stub score"})
         return json.dumps({"answer": user[:500]})
     return f"stub completion for: {user[:500]}"
 
