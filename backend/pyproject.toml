@@ -33,7 +33,10 @@ dependencies = [
     "openai==2.41.0",
     "litellm==1.88.0",
     "langfuse==4.7.1",
-    "langgraph==0.2.76",  # fixed report-generation graph (Phase 5, ADR 0017)
+    "langgraph==1.0.10",  # fixed report-generation graph (Phase 5, ADR 0017); 1.0.x clears PYSEC-2026-83
+    # Pinned explicitly (langgraph allows checkpoint <5.0,>=2.1, so it wouldn't upgrade the
+    # transitive 2.1.2): 4.x clears CVE-2025-64439 (fix 3.0.0) + CVE-2026-27794 (fix 4.0.0).
+    "langgraph-checkpoint==4.1.1",
     "fpdf2==2.8.5",  # deterministic, dependency-free PDF export (Phase 5, ADR 0018)
     "pyyaml==6.0.3",
 ]
@@ -211,8 +214,6 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 filterwarnings = [
     "error",
-    # langgraph 0.2.x emits this on import via its checkpoint serde; we don't use checkpoints.
-    "ignore:The default value of .allowed_objects.:Warning",
 ]
 markers = [
     "benchmark: hot-path performance benchmark — runs in the benchmarks CI job, not the default suite",

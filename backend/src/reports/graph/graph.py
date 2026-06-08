@@ -29,7 +29,8 @@ def build_report_graph(
 ) -> Any:
     """Compile the fixed linear report graph with its dependencies bound. Returns a compiled
     LangGraph runnable; call ``await graph.ainvoke(initial_state)``."""
-    graph: StateGraph = StateGraph(ReportState)
+    # StateGraph is generic in langgraph 1.0; let the constructor supply the type parameters.
+    graph = StateGraph(ReportState)
     graph.add_node(
         "knowledge_agent",
         partial(knowledge_agent, retriever=retriever, actor=actor, settings=settings),
