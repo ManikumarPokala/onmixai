@@ -272,9 +272,11 @@ jobs:
       - run: npm run build
 
   openapi-sync:
-    # The committed OpenAPI snapshot (frontend/openapi.json) must match the live FastAPI
-    # schema — a backend API change without a regenerated snapshot fails here (and would
-    # then fail the frontend client-regeneration check).
+    # Generated frontend artifacts must match the backend source of truth:
+    #  - frontend/openapi.json   — the live FastAPI schema (a backend API change without a
+    #    regenerated snapshot fails here, and would then fail the frontend client regen check);
+    #  - frontend/error-codes.json — the canonical AppError code set (a new backend error code
+    #    without a frontend message fails the frontend errors.test.ts lockstep gate).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -285,7 +287,8 @@ jobs:
       - run: uv venv --python ${{ env.PYTHON_VERSION }} .venv
       - run: uv pip install --python .venv -e ".[dev]"
       - run: .venv/bin/python -m scripts.dump_openapi
-      - run: git -C .. diff --exit-code -- frontend/openapi.json
+      - run: .venv/bin/python -m scripts.dump_error_codes
+      - run: git -C .. diff --exit-code -- frontend/openapi.json frontend/error-codes.json
 
   security:
     runs-on: ubuntu-latest

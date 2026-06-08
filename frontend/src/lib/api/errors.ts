@@ -13,6 +13,7 @@ export const ERROR_CODES = [
   'REFRESH_TOKEN_REUSED',
   'ORGANIZATION_NOT_FOUND',
   'ORG_SLUG_TAKEN',
+  'WEAK_PASSWORD',
   'FORBIDDEN',
   // shared
   'RATE_LIMITED',
@@ -37,6 +38,7 @@ export const ERROR_CODES = [
   'BUDGET_EXCEEDED',
   'GUARDRAIL_VIOLATION',
   'SCHEMA_VALIDATION_FAILED',
+  'OUTPUT_SCHEMA_VIOLATION',
   // conversation
   'SESSION_NOT_FOUND',
   'SESSION_ARCHIVED',
@@ -45,6 +47,10 @@ export const ERROR_CODES = [
   'MESSAGE_EMPTY',
   'MESSAGE_NOT_FOUND',
   'INVALID_CURSOR',
+  // recommendation / reports
+  'RECOMMENDATION_NOT_FOUND',
+  'REPORT_NOT_FOUND',
+  'EXPORT_NOT_FOUND',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]
@@ -57,6 +63,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   REFRESH_TOKEN_REUSED: 'For your security we signed you out. Please sign in again.',
   ORGANIZATION_NOT_FOUND: 'We could not find that organization.',
   ORG_SLUG_TAKEN: 'That organization slug is already taken. Please choose another.',
+  WEAK_PASSWORD: 'Password must be at least 12 characters.',
   FORBIDDEN: 'You do not have permission to do that.',
   RATE_LIMITED: 'You are going a little fast — please wait a moment and try again.',
   VALIDATION_ERROR: 'Some of the information provided was invalid.',
@@ -77,6 +84,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   BUDGET_EXCEEDED: 'Your organization has reached its usage limit for this period.',
   GUARDRAIL_VIOLATION: 'That request could not be processed for safety reasons.',
   SCHEMA_VALIDATION_FAILED: 'The AI returned an unexpected response. Please try again.',
+  OUTPUT_SCHEMA_VIOLATION: 'The AI returned a response in an unexpected format. Please try again.',
   SESSION_NOT_FOUND: 'That chat could not be found.',
   SESSION_ARCHIVED: 'This chat is archived. Restore it to continue the conversation.',
   SESSION_LIMIT_EXCEEDED: 'You have reached the maximum number of chats.',
@@ -84,6 +92,9 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   MESSAGE_EMPTY: 'Please type a message before sending.',
   MESSAGE_NOT_FOUND: 'That message could not be found.',
   INVALID_CURSOR: 'The page could not be loaded. Please refresh.',
+  RECOMMENDATION_NOT_FOUND: 'That recommendation could not be found.',
+  REPORT_NOT_FOUND: 'That report could not be found.',
+  EXPORT_NOT_FOUND: 'That export could not be found.',
 }
 
 const GENERIC_MESSAGE = 'Something went wrong. Please try again.'
