@@ -1,0 +1,9 @@
+name: recommendation
+version: 1.0.0
+owner_feature: recommendation
+variables:
+  sources: str
+  query: str
+body_sha256: 7c821a1d5b7937966647fdbf851f92a6dbb784a16a02756db0cbad6cbfdd9eb2
+changelog:
+  - "1.0.0: initial structured-recommendation template (grounded justifications, cite-or-decline)"
