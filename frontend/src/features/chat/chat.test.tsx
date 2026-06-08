@@ -139,9 +139,12 @@ describe('chat — streaming + states', () => {
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Stop' }))
 
-    // Streaming ended (Send is back), the partial text is frozen, nothing persisted.
-    expect(await screen.findByText('Stopped.')).toBeInTheDocument()
-    expect(screen.getByText(/partial answer/)).toBeInTheDocument()
+    // Streaming ended (Send is back); the partial fragment is frozen and clearly marked
+    // unverified (it was never grounding-validated and carries no citations); nothing persisted.
+    expect(await screen.findByText('Stopped — partial, unverified')).toBeInTheDocument()
+    const stopped = screen.getByRole('note', { name: 'Stopped response' })
+    expect(within(stopped).getByText(/partial answer/)).toBeInTheDocument()
+    expect(within(stopped).queryByLabelText('Sources')).not.toBeInTheDocument() // no citations
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
     expect(backend.messages['s1']).toHaveLength(0)
   })

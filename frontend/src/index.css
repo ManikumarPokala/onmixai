@@ -363,11 +363,19 @@ button {
   }
 }
 
-.stopped-note {
-  color: var(--text-dim);
-  font-size: 0.85rem;
-  font-style: italic;
-  margin: 0.4rem 0 0;
+.bubble--stopped {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px dashed var(--text-dim);
+  opacity: 0.9;
+}
+.stopped-banner {
+  color: var(--warn);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 0 0 0.35rem;
 }
 .message-content {
   margin: 0;

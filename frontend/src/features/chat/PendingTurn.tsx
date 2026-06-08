@@ -25,6 +25,14 @@ export function PendingTurnView({ turn, onRetry }: { turn: PendingTurn; onRetry:
             Retry
           </button>
         </div>
+      ) : turn.phase === 'stopped' ? (
+        // The partial fragment was never grounding-validated and carries no citations —
+        // mark it clearly so it can't be mistaken for a verified answer (cite-or-refuse
+        // honesty applied to the cancel path).
+        <div className="bubble bubble--stopped" role="note" aria-label="Stopped response">
+          <p className="stopped-banner">Stopped — partial, unverified</p>
+          <p className="message-content">{turn.text}</p>
+        </div>
       ) : (
         <div className="bubble bubble--assistant">
           <MessageContent text={turn.text} citations={turn.citations} />
@@ -33,7 +41,6 @@ export function PendingTurnView({ turn, onRetry }: { turn: PendingTurn; onRetry:
               Assistant is responding
             </span>
           )}
-          {turn.phase === 'stopped' && <p className="stopped-note">Stopped.</p>}
           <SourcesPanel citations={turn.citations} />
         </div>
       )}
