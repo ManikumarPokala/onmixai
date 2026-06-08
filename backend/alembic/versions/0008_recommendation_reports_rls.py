@@ -28,7 +28,9 @@ _TIMESTAMP = sa.DateTime(timezone=True)
 recommendation_status = postgresql.ENUM(
     "completed", "declined", name="recommendation_status", create_type=False
 )
-confidence_band = postgresql.ENUM("high", "medium", "low", name="confidence_band", create_type=False)
+confidence_band = postgresql.ENUM(
+    "high", "medium", "low", name="confidence_band", create_type=False
+)
 report_type = postgresql.ENUM(
     "executive_summary", "technical", "recommendation", name="report_type", create_type=False
 )
@@ -40,7 +42,14 @@ export_status = postgresql.ENUM(
     "queued", "generating", "ready", "failed", name="export_status", create_type=False
 )
 
-_ENUMS = (recommendation_status, confidence_band, report_type, report_status, export_format, export_status)
+_ENUMS = (
+    recommendation_status,
+    confidence_band,
+    report_type,
+    report_status,
+    export_format,
+    export_status,
+)
 
 
 def upgrade() -> None:
@@ -55,7 +64,9 @@ def upgrade() -> None:
         sa.Column("created_by", sa.Uuid(), nullable=False),
         sa.Column("query", sa.Text(), nullable=False),
         sa.Column(
-            "collection_scope", postgresql.JSONB(), server_default=sa.text("'[]'::jsonb"),
+            "collection_scope",
+            postgresql.JSONB(),
+            server_default=sa.text("'[]'::jsonb"),
             nullable=False,
         ),
         sa.Column("status", recommendation_status, nullable=False),
@@ -67,17 +78,22 @@ def upgrade() -> None:
         sa.Column("created_at", _TIMESTAMP, server_default=sa.text("now()"), nullable=False),
         sa.PrimaryKeyConstraint("id", name="pk_recommendations"),
         sa.ForeignKeyConstraint(
-            ["org_id"], ["organizations.id"],
-            name="fk_recommendations_org_id_organizations", ondelete="CASCADE",
+            ["org_id"],
+            ["organizations.id"],
+            name="fk_recommendations_org_id_organizations",
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["created_by"], ["users.id"],
-            name="fk_recommendations_created_by_users", ondelete="CASCADE",
+            ["created_by"],
+            ["users.id"],
+            name="fk_recommendations_created_by_users",
+            ondelete="CASCADE",
         ),
     )
     op.create_index(
         "ix_recommendations_org_creator_created",
-        "recommendations", ["org_id", "created_by", "created_at"],
+        "recommendations",
+        ["org_id", "created_by", "created_at"],
     )
 
     op.create_table(
@@ -89,7 +105,9 @@ def upgrade() -> None:
         sa.Column("title", sa.String(length=255), nullable=False),
         sa.Column("source_query", sa.Text(), nullable=False),
         sa.Column(
-            "collection_scope", postgresql.JSONB(), server_default=sa.text("'[]'::jsonb"),
+            "collection_scope",
+            postgresql.JSONB(),
+            server_default=sa.text("'[]'::jsonb"),
             nullable=False,
         ),
         sa.Column("status", report_status, nullable=False),
@@ -103,11 +121,16 @@ def upgrade() -> None:
         sa.Column("updated_at", _TIMESTAMP, server_default=sa.text("now()"), nullable=False),
         sa.PrimaryKeyConstraint("id", name="pk_reports"),
         sa.ForeignKeyConstraint(
-            ["org_id"], ["organizations.id"],
-            name="fk_reports_org_id_organizations", ondelete="CASCADE",
+            ["org_id"],
+            ["organizations.id"],
+            name="fk_reports_org_id_organizations",
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["created_by"], ["users.id"], name="fk_reports_created_by_users", ondelete="CASCADE",
+            ["created_by"],
+            ["users.id"],
+            name="fk_reports_created_by_users",
+            ondelete="CASCADE",
         ),
     )
     op.create_index(
@@ -129,18 +152,20 @@ def upgrade() -> None:
         sa.Column("created_at", _TIMESTAMP, server_default=sa.text("now()"), nullable=False),
         sa.PrimaryKeyConstraint("id", name="pk_report_exports"),
         sa.ForeignKeyConstraint(
-            ["org_id"], ["organizations.id"],
-            name="fk_report_exports_org_id_organizations", ondelete="CASCADE",
+            ["org_id"],
+            ["organizations.id"],
+            name="fk_report_exports_org_id_organizations",
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["report_id"], ["reports.id"],
-            name="fk_report_exports_report_id_reports", ondelete="CASCADE",
+            ["report_id"],
+            ["reports.id"],
+            name="fk_report_exports_report_id_reports",
+            ondelete="CASCADE",
         ),
         sa.UniqueConstraint("report_id", "format", name="uq_report_exports_report_id_format"),
     )
-    op.create_index(
-        "ix_report_exports_status_claimed", "report_exports", ["status", "claimed_at"]
-    )
+    op.create_index("ix_report_exports_status_claimed", "report_exports", ["status", "claimed_at"])
 
     for table in _TENANT_TABLES:
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")

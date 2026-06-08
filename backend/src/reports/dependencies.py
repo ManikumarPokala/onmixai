@@ -5,8 +5,8 @@ only."""
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.reports.repository import ReportRepository
-from src.reports.service import ReportService
+from src.reports.repository import ReportExportRepository, ReportRepository
+from src.reports.service import ReportExportService, ReportService
 from src.shared.audit import AuditEmitter, get_audit_emitter
 from src.shared.config import Settings, get_settings
 from src.shared.database import get_db_session
@@ -25,4 +25,18 @@ def get_report_service(
         queue=queue,
         audit=audit,
         settings=settings,
+    )
+
+
+def get_export_service(
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditEmitter = Depends(get_audit_emitter),
+    queue: JobQueue = Depends(get_job_queue),
+) -> ReportExportService:
+    return ReportExportService(
+        session=session,
+        exports=ReportExportRepository(session),
+        reports=ReportRepository(session),
+        queue=queue,
+        audit=audit,
     )

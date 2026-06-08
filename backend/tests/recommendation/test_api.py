@@ -44,9 +44,7 @@ async def _second_user_token(harness: RecHarness, owner_token: str) -> str:
     )
 
 
-async def _create(
-    harness: RecHarness, token: str, query: str = "which vendor?"
-) -> dict[str, Any]:
+async def _create(harness: RecHarness, token: str, query: str = "which vendor?") -> dict[str, Any]:
     resp = await harness.client.post(
         "/api/v1/recommendations", headers=auth_header(token), json={"query": query}
     )

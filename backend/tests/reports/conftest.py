@@ -13,6 +13,8 @@ from src.main import create_app
 from src.shared.config import Settings, get_settings
 from src.shared.database import get_db_session, run_after_commit
 from src.shared.queue import get_job_queue
+from src.shared.storage import get_object_storage
+from tests.fakes.fake_storage import FakeObjectStorage
 
 
 class FakeQueue:
@@ -38,6 +40,7 @@ class FakeQueue:
 class ReportHarness:
     client: httpx.AsyncClient
     queue: FakeQueue
+    storage: FakeObjectStorage
     db_session: AsyncSession
     settings: Settings = field(default=None)  # type: ignore[assignment]
 
@@ -48,6 +51,7 @@ async def report_harness(
 ) -> AsyncIterator[ReportHarness]:
     app = create_app()
     queue = FakeQueue()
+    storage = FakeObjectStorage()
 
     async def _session_override() -> AsyncIterator[AsyncSession]:
         yield db_session
@@ -57,10 +61,13 @@ async def report_harness(
     app.dependency_overrides[get_db_session] = _session_override
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_job_queue] = lambda: queue
+    app.dependency_overrides[get_object_storage] = lambda: storage
 
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        yield ReportHarness(client=client, queue=queue, db_session=db_session, settings=settings)
+        yield ReportHarness(
+            client=client, queue=queue, storage=storage, db_session=db_session, settings=settings
+        )
 
 
 def auth_header(token: str) -> dict[str, str]:

@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy import CursorResult, literal, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.reports.models import Report, ReportStatus
+from src.reports.models import ExportFormat, ExportStatus, Report, ReportExport, ReportStatus
 
 
 class ReportRepository:
@@ -133,6 +133,109 @@ class ReportRepository:
                 Report.org_id == org_id,
                 Report.status == ReportStatus.GENERATING,
                 Report.claimed_at < cutoff,
+            )
+        )
+        return list(result.scalars().all())
+
+
+class ReportExportRepository:
+    """Report-export queries (idempotent per report+format, CAS lifecycle)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(self, export: ReportExport) -> ReportExport:
+        """Persist a new (QUEUED) export. Time: O(1)."""
+        self._session.add(export)
+        await self._session.flush()
+        return export
+
+    async def get(self, org_id: UUID, export_id: UUID) -> ReportExport | None:
+        result = await self._session.execute(
+            select(ReportExport).where(ReportExport.org_id == org_id, ReportExport.id == export_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_for_report(
+        self, org_id: UUID, report_id: UUID, export_format: ExportFormat
+    ) -> ReportExport | None:
+        """The existing export for (report, format) — drives request idempotency. O(1)."""
+        result = await self._session.execute(
+            select(ReportExport).where(
+                ReportExport.org_id == org_id,
+                ReportExport.report_id == report_id,
+                ReportExport.format == export_format,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def claim(self, org_id: UUID, export_id: UUID, now: datetime) -> bool:
+        """Atomically claim a QUEUED export (compare-and-set → GENERATING). O(1)."""
+        stmt = (
+            update(ReportExport)
+            .where(
+                ReportExport.org_id == org_id,
+                ReportExport.id == export_id,
+                ReportExport.status == ExportStatus.QUEUED,
+            )
+            .values(
+                status=ExportStatus.GENERATING,
+                claimed_at=now,
+                attempt_count=ReportExport.attempt_count + 1,
+            )
+        )
+        result = cast("CursorResult[Any]", await self._session.execute(stmt))
+        return result.rowcount == 1
+
+    async def mark_ready(self, org_id: UUID, export_id: UUID, *, storage_key: str) -> bool:
+        """GENERATING → READY (compare-and-set), recording the storage key. O(1)."""
+        stmt = (
+            update(ReportExport)
+            .where(
+                ReportExport.org_id == org_id,
+                ReportExport.id == export_id,
+                ReportExport.status == ExportStatus.GENERATING,
+            )
+            .values(status=ExportStatus.READY, storage_key=storage_key, failure_reason=None)
+        )
+        result = cast("CursorResult[Any]", await self._session.execute(stmt))
+        return result.rowcount == 1
+
+    async def mark_failed(self, org_id: UUID, export_id: UUID, reason: str) -> bool:
+        """GENERATING → FAILED (compare-and-set). O(1)."""
+        stmt = (
+            update(ReportExport)
+            .where(
+                ReportExport.org_id == org_id,
+                ReportExport.id == export_id,
+                ReportExport.status == ExportStatus.GENERATING,
+            )
+            .values(status=ExportStatus.FAILED, failure_reason=reason)
+        )
+        result = cast("CursorResult[Any]", await self._session.execute(stmt))
+        return result.rowcount == 1
+
+    async def requeue(self, org_id: UUID, export_id: UUID) -> bool:
+        """GENERATING → QUEUED (compare-and-set) — sweeper recovery. O(1)."""
+        stmt = (
+            update(ReportExport)
+            .where(
+                ReportExport.org_id == org_id,
+                ReportExport.id == export_id,
+                ReportExport.status == ExportStatus.GENERATING,
+            )
+            .values(status=ExportStatus.QUEUED, claimed_at=None)
+        )
+        result = cast("CursorResult[Any]", await self._session.execute(stmt))
+        return result.rowcount == 1
+
+    async def list_stuck(self, org_id: UUID, cutoff: datetime) -> list[ReportExport]:
+        """Exports stuck in GENERATING with a claim older than ``cutoff``. O(stuck)."""
+        result = await self._session.execute(
+            select(ReportExport).where(
+                ReportExport.org_id == org_id,
+                ReportExport.status == ExportStatus.GENERATING,
+                ReportExport.claimed_at < cutoff,
             )
         )
         return list(result.scalars().all())

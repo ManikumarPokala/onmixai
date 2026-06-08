@@ -9,7 +9,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.reports.models import Report, ReportStatus, ReportType
+from src.reports.models import (
+    ExportFormat,
+    ExportStatus,
+    Report,
+    ReportExport,
+    ReportStatus,
+    ReportType,
+)
 
 # report_type → versioned prompt template (Phase 3 registry). One template per type.
 TEMPLATE_FOR_TYPE: dict[ReportType, str] = {
@@ -94,3 +101,25 @@ class ReportResponse(BaseModel):
 class ReportPage(BaseModel):
     reports: list[ReportResponse]
     next_cursor: str | None
+
+
+class ExportResponse(BaseModel):
+    """A report export at any lifecycle stage (the storage key is internal, never exposed)."""
+
+    id: UUID
+    report_id: UUID
+    format: ExportFormat
+    status: ExportStatus
+    failure_reason: str | None
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, row: ReportExport) -> "ExportResponse":
+        return cls(
+            id=row.id,
+            report_id=row.report_id,
+            format=row.format,
+            status=row.status,
+            failure_reason=row.failure_reason,
+            created_at=row.created_at,
+        )

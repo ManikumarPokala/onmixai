@@ -381,6 +381,70 @@
         "title": "DocumentStatus",
         "type": "string"
       },
+      "ExportFormat": {
+        "enum": [
+          "pdf"
+        ],
+        "title": "ExportFormat",
+        "type": "string"
+      },
+      "ExportResponse": {
+        "description": "A report export at any lifecycle stage (the storage key is internal, never exposed).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "format": {
+            "$ref": "#/components/schemas/ExportFormat"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "report_id": {
+            "format": "uuid",
+            "title": "Report Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ExportStatus"
+          }
+        },
+        "required": [
+          "id",
+          "report_id",
+          "format",
+          "status",
+          "failure_reason",
+          "created_at"
+        ],
+        "title": "ExportResponse",
+        "type": "object"
+      },
+      "ExportStatus": {
+        "enum": [
+          "queued",
+          "generating",
+          "ready",
+          "failed"
+        ],
+        "title": "ExportStatus",
+        "type": "string"
+      },
       "FeedbackRating": {
         "enum": [
           "up",
@@ -2771,6 +2835,159 @@
           }
         ],
         "summary": "Get Report"
+      }
+    },
+    "/api/v1/reports/{report_id}/exports": {
+      "post": {
+        "operationId": "create_export_api_v1_reports__report_id__exports_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Report Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Export"
+      }
+    },
+    "/api/v1/reports/{report_id}/exports/{export_id}": {
+      "get": {
+        "operationId": "get_export_api_v1_reports__report_id__exports__export_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "export_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Export Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Export"
+      }
+    },
+    "/api/v1/reports/{report_id}/exports/{export_id}/download": {
+      "get": {
+        "operationId": "download_export_api_v1_reports__report_id__exports__export_id__download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "export_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Export Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Download Export"
       }
     },
     "/api/v1/search": {

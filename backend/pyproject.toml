@@ -34,6 +34,7 @@ dependencies = [
     "litellm==1.88.0",
     "langfuse==4.7.1",
     "langgraph==0.2.76",  # fixed report-generation graph (Phase 5, ADR 0017)
+    "fpdf2==2.8.5",  # deterministic, dependency-free PDF export (Phase 5, ADR 0018)
     "pyyaml==6.0.3",
 ]
 
@@ -108,10 +109,26 @@ module = [
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# Parser libraries are partially/incompletely typed — treat as untyped (Any).
-module = ["pymupdf.*", "fitz.*", "docx.*", "pptx.*", "pytesseract.*", "openpyxl.*", "litellm.*", "langfuse.*"]
+# Parser + render libraries are partially/incompletely typed — treat as untyped (Any).
+module = [
+    "pymupdf.*",
+    "fitz.*",
+    "docx.*",
+    "pptx.*",
+    "pytesseract.*",
+    "openpyxl.*",
+    "litellm.*",
+    "langfuse.*",
+    "fpdf.*",
+]
 ignore_missing_imports = true
 follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+# The PDF renderer subclasses fpdf2's FPDF (an Any base, since fpdf2 is untyped) to override
+# footer() — the library's only extension point for a per-page footer.
+module = ["src.reports.pdf"]
+disallow_subclassing_any = false
 
 [tool.importlinter]
 root_package = "src"

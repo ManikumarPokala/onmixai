@@ -5,12 +5,19 @@ non-owner). Failed/declined reports are returned honestly with their reason, nev
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import StreamingResponse
 
 from src.identity.dependencies import get_current_user
 from src.identity.schemas import AuthContext
-from src.reports.dependencies import get_report_service
-from src.reports.schemas import CreateReportRequest, ReportPage, ReportResponse
-from src.reports.service import ReportService
+from src.reports.dependencies import get_export_service, get_report_service
+from src.reports.schemas import (
+    CreateReportRequest,
+    ExportResponse,
+    ReportPage,
+    ReportResponse,
+)
+from src.reports.service import ReportExportService, ReportService
+from src.shared.storage import ObjectStorage, get_object_storage
 
 router = APIRouter()
 
@@ -47,3 +54,40 @@ async def get_report(
     service: ReportService = Depends(get_report_service),
 ) -> ReportResponse:
     return await service.get(actor, report_id)
+
+
+@router.post("/reports/{report_id}/exports", status_code=status.HTTP_202_ACCEPTED)
+async def create_export(
+    report_id: UUID,
+    actor: AuthContext = Depends(get_current_user),
+    service: ReportExportService = Depends(get_export_service),
+) -> ExportResponse:
+    return await service.create(actor, report_id)
+
+
+@router.get("/reports/{report_id}/exports/{export_id}")
+async def get_export(
+    report_id: UUID,
+    export_id: UUID,
+    actor: AuthContext = Depends(get_current_user),
+    service: ReportExportService = Depends(get_export_service),
+) -> ExportResponse:
+    return await service.get(actor, report_id, export_id)
+
+
+@router.get("/reports/{report_id}/exports/{export_id}/download")
+async def download_export(
+    report_id: UUID,
+    export_id: UUID,
+    actor: AuthContext = Depends(get_current_user),
+    service: ReportExportService = Depends(get_export_service),
+    storage: ObjectStorage = Depends(get_object_storage),
+) -> StreamingResponse:
+    # ACL-checked: a non-owner / cross-org / not-ready export is a 404 here — never another
+    # tenant's object. The PDF is streamed (proxied) from storage; storage keys never leak.
+    key = await service.resolve_download(actor, report_id, export_id)
+    return StreamingResponse(
+        storage.get_stream(key),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="report-{report_id}.pdf"'},
+    )

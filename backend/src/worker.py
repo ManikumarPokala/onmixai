@@ -33,6 +33,7 @@ from src.knowledge.worker import (
 )
 from src.recommendation import models as _recommendation_models  # noqa: F401 - register tables
 from src.reports import models as _reports_models  # noqa: F401 - register report tables
+from src.reports.export_worker import export_report_pdf, sweep_stuck_exports
 from src.reports.worker import generate_report, sweep_stuck_reports
 from src.search.service import SearchService
 from src.shared.audit import get_audit_emitter
@@ -79,11 +80,17 @@ async def _on_startup(ctx: dict[str, Any]) -> None:
 
 
 class WorkerSettings:
-    functions = [ingest_document, summarize_session, generate_report]
+    functions = [
+        ingest_document,
+        summarize_session,
+        generate_report,
+        export_report_pdf,
+    ]
     cron_jobs = [
         cron(sweep_stuck_documents, minute=set(range(0, 60, 5)), run_at_startup=False),
         cron(sweep_storage_outbox, minute=set(range(0, 60, 5)), run_at_startup=False),
         cron(sweep_stuck_reports, minute=set(range(0, 60, 5)), run_at_startup=False),
+        cron(sweep_stuck_exports, minute=set(range(0, 60, 5)), run_at_startup=False),
     ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     on_startup = _on_startup
