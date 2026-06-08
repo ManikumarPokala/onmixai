@@ -240,6 +240,40 @@
         "title": "CreateRecommendationRequest",
         "type": "object"
       },
+      "CreateReportRequest": {
+        "properties": {
+          "collection_scope": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Collection Scope",
+            "type": "array"
+          },
+          "query": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "report_type": {
+            "$ref": "#/components/schemas/ReportType"
+          },
+          "title": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_type",
+          "title",
+          "query"
+        ],
+        "title": "CreateReportRequest",
+        "type": "object"
+      },
       "CreateSessionRequest": {
         "properties": {
           "title": {
@@ -867,6 +901,211 @@
         ],
         "title": "RegisterResponse",
         "type": "object"
+      },
+      "ReportCitationOut": {
+        "description": "A section's citation resolved to its source (hydrated for the UI).",
+        "properties": {
+          "chunk_id": {
+            "format": "uuid",
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "marker_index": {
+            "title": "Marker Index",
+            "type": "integer"
+          },
+          "page_ref": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Ref"
+          }
+        },
+        "required": [
+          "marker_index",
+          "chunk_id",
+          "document_id",
+          "collection_id",
+          "filename"
+        ],
+        "title": "ReportCitationOut",
+        "type": "object"
+      },
+      "ReportPage": {
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/ReportResponse"
+            },
+            "title": "Reports",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reports",
+          "next_cursor"
+        ],
+        "title": "ReportPage",
+        "type": "object"
+      },
+      "ReportResponse": {
+        "description": "A report at any lifecycle stage. ``sections``/``citations`` are empty until ready; a\nfailed report carries a ``failure_reason`` (including the INSUFFICIENT_EVIDENCE /\nNO_GROUNDED_SECTIONS content declines) \u2014 shown honestly, never as empty success.",
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/ReportCitationOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "generation_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Metadata"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "report_type": {
+            "$ref": "#/components/schemas/ReportType"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ReportSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReportStatus"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "report_type",
+          "title",
+          "status",
+          "failure_reason",
+          "sections",
+          "citations",
+          "generation_metadata",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReportResponse",
+        "type": "object"
+      },
+      "ReportSection": {
+        "additionalProperties": false,
+        "description": "One report section, grounded in \u22651 numbered source.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "citation_markers": {
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "title": "Citation Markers",
+            "type": "array"
+          },
+          "heading": {
+            "title": "Heading",
+            "type": "string"
+          }
+        },
+        "required": [
+          "heading",
+          "body",
+          "citation_markers"
+        ],
+        "title": "ReportSection",
+        "type": "object"
+      },
+      "ReportStatus": {
+        "enum": [
+          "queued",
+          "generating",
+          "ready",
+          "failed"
+        ],
+        "title": "ReportStatus",
+        "type": "string"
+      },
+      "ReportType": {
+        "enum": [
+          "executive_summary",
+          "technical",
+          "recommendation"
+        ],
+        "title": "ReportType",
+        "type": "string"
       },
       "Role": {
         "description": "Organization-scoped role assigned to a user.",
@@ -2383,6 +2622,155 @@
           }
         ],
         "summary": "Get Recommendation"
+      }
+    },
+    "/api/v1/reports": {
+      "get": {
+        "operationId": "list_reports_api_v1_reports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Reports"
+      },
+      "post": {
+        "operationId": "create_report_api_v1_reports_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Report"
+      }
+    },
+    "/api/v1/reports/{report_id}": {
+      "get": {
+        "operationId": "get_report_api_v1_reports__report_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Report Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Report"
       }
     },
     "/api/v1/search": {

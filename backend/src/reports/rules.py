@@ -5,7 +5,25 @@ content decline). Branch-testable (patterns.md §4)."""
 
 from dataclasses import dataclass
 
+from src.reports.models import ReportStatus
 from src.reports.schemas import ReportContent, ReportSection
+
+# Report lifecycle transition map (patterns.md §3). Enforced in storage by compare-and-set
+# (UPDATE ... WHERE status = :expected); this map documents + validates the legal moves.
+# GENERATING→QUEUED is the sweeper requeue of a dead worker's claim; FAILED→QUEUED is a retry.
+_TRANSITIONS: dict[ReportStatus, frozenset[ReportStatus]] = {
+    ReportStatus.QUEUED: frozenset({ReportStatus.GENERATING}),
+    ReportStatus.GENERATING: frozenset(
+        {ReportStatus.READY, ReportStatus.FAILED, ReportStatus.QUEUED}
+    ),
+    ReportStatus.READY: frozenset(),
+    ReportStatus.FAILED: frozenset({ReportStatus.QUEUED}),
+}
+
+
+def can_transition(frm: ReportStatus, to: ReportStatus) -> bool:
+    """Whether ``frm → to`` is a legal report lifecycle move. Time/Space: O(1)."""
+    return to in _TRANSITIONS[frm]
 
 
 @dataclass(frozen=True, slots=True)

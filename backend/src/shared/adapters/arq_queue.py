@@ -7,7 +7,7 @@ from arq import create_pool
 from arq.connections import RedisSettings
 
 from src.shared.config import Settings
-from src.shared.queue import INGEST_TASK
+from src.shared.queue import EXPORT_TASK, INGEST_TASK, REPORT_TASK
 
 
 class ArqJobQueue:
@@ -25,6 +25,14 @@ class ArqJobQueue:
     async def enqueue_ingest(self, *, document_id: UUID, org_id: UUID) -> None:
         pool = await self._get_pool()
         await pool.enqueue_job(INGEST_TASK, str(document_id), str(org_id))
+
+    async def enqueue_report(self, *, report_id: UUID, org_id: UUID) -> None:
+        pool = await self._get_pool()
+        await pool.enqueue_job(REPORT_TASK, str(report_id), str(org_id))
+
+    async def enqueue_export(self, *, export_id: UUID, org_id: UUID) -> None:
+        pool = await self._get_pool()
+        await pool.enqueue_job(EXPORT_TASK, str(export_id), str(org_id))
 
     async def close(self) -> None:
         if self._pool is not None:

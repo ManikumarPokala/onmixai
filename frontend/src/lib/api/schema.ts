@@ -316,6 +316,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Reports */
+        get: operations["list_reports_api_v1_reports_get"];
+        put?: never;
+        /** Create Report */
+        post: operations["create_report_api_v1_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/{report_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Report */
+        get: operations["get_report_api_v1_reports__report_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -503,6 +538,16 @@ export interface components {
             collection_scope?: string[];
             /** Query */
             query: string;
+        };
+        /** CreateReportRequest */
+        CreateReportRequest: {
+            /** Collection Scope */
+            collection_scope?: string[];
+            /** Query */
+            query: string;
+            report_type: components["schemas"]["ReportType"];
+            /** Title */
+            title: string;
         };
         /** CreateSessionRequest */
         CreateSessionRequest: {
@@ -732,6 +777,99 @@ export interface components {
             organization: components["schemas"]["OrganizationResponse"];
             user: components["schemas"]["UserResponse"];
         };
+        /**
+         * ReportCitationOut
+         * @description A section's citation resolved to its source (hydrated for the UI).
+         */
+        ReportCitationOut: {
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /**
+             * Collection Id
+             * Format: uuid
+             */
+            collection_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Filename */
+            filename: string;
+            /** Marker Index */
+            marker_index: number;
+            /** Page Ref */
+            page_ref?: number | null;
+        };
+        /** ReportPage */
+        ReportPage: {
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Reports */
+            reports: components["schemas"]["ReportResponse"][];
+        };
+        /**
+         * ReportResponse
+         * @description A report at any lifecycle stage. ``sections``/``citations`` are empty until ready; a
+         *     failed report carries a ``failure_reason`` (including the INSUFFICIENT_EVIDENCE /
+         *     NO_GROUNDED_SECTIONS content declines) — shown honestly, never as empty success.
+         */
+        ReportResponse: {
+            /** Citations */
+            citations: components["schemas"]["ReportCitationOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Failure Reason */
+            failure_reason: string | null;
+            /** Generation Metadata */
+            generation_metadata: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            report_type: components["schemas"]["ReportType"];
+            /** Sections */
+            sections: components["schemas"]["ReportSection"][];
+            status: components["schemas"]["ReportStatus"];
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ReportSection
+         * @description One report section, grounded in ≥1 numbered source.
+         */
+        ReportSection: {
+            /** Body */
+            body: string;
+            /** Citation Markers */
+            citation_markers: number[];
+            /** Heading */
+            heading: string;
+        };
+        /**
+         * ReportStatus
+         * @enum {string}
+         */
+        ReportStatus: "queued" | "generating" | "ready" | "failed";
+        /**
+         * ReportType
+         * @enum {string}
+         */
+        ReportType: "executive_summary" | "technical" | "recommendation";
         /**
          * Role
          * @description Organization-scoped role assigned to a user.
@@ -1656,6 +1794,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecommendationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_reports_api_v1_reports_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_report_api_v1_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_report_api_v1_reports__report_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportResponse"];
                 };
             };
             /** @description Validation Error */

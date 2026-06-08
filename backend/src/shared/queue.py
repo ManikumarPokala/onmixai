@@ -11,13 +11,23 @@ from uuid import UUID
 
 from src.shared.config import get_settings
 
-# Job name shared between the enqueue side and the worker function (Task 5).
+# Job names shared between the enqueue side and the worker functions.
 INGEST_TASK = "ingest_document"
+REPORT_TASK = "generate_report"
+EXPORT_TASK = "export_report_pdf"
 
 
 class JobQueue(Protocol):
     async def enqueue_ingest(self, *, document_id: UUID, org_id: UUID) -> None:
         """Enqueue an ingestion job for a committed document."""
+        ...
+
+    async def enqueue_report(self, *, report_id: UUID, org_id: UUID) -> None:
+        """Enqueue a report-generation job for a committed (queued) report."""
+        ...
+
+    async def enqueue_export(self, *, export_id: UUID, org_id: UUID) -> None:
+        """Enqueue a PDF-export job for a committed (queued) export."""
         ...
 
     async def close(self) -> None:

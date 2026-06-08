@@ -23,12 +23,18 @@ from src.identity import models as _identity_models  # noqa: F401 - register ide
 from src.identity.repository import OrganizationRepository
 from src.identity.service import OrgPolicyService
 from src.knowledge import models as _knowledge_models  # noqa: F401 - register knowledge tables
+from src.knowledge.repository import ChunkRepository
+from src.knowledge.service import ChunkRetrievalService
 from src.knowledge.worker import (
     ingest_document,
     ingest_startup,
     sweep_storage_outbox,
     sweep_stuck_documents,
 )
+from src.recommendation import models as _recommendation_models  # noqa: F401 - register tables
+from src.reports import models as _reports_models  # noqa: F401 - register report tables
+from src.reports.worker import generate_report, sweep_stuck_reports
+from src.search.service import SearchService
 from src.shared.audit import get_audit_emitter
 from src.shared.config import get_settings
 
@@ -52,18 +58,32 @@ def _make_gateway(session: AsyncSession) -> LLMGateway:
     )
 
 
+def _make_retriever(session: AsyncSession) -> SearchService:
+    """Compose the permission-aware retriever (search over knowledge) for a worker session —
+    the report graph's only retrieval entry. Cross-domain wiring at the composition root."""
+    settings = get_settings()
+    return SearchService(
+        reader=ChunkRetrievalService(ChunkRepository(session), settings),
+        embedder=OpenAIEmbedder(settings),
+        audit=get_audit_emitter(),
+        settings=settings,
+    )
+
+
 async def _on_startup(ctx: dict[str, Any]) -> None:
     await ingest_startup(ctx)
     ctx["tenant_lister_factory"] = _make_tenant_lister
     ctx["embedder"] = OpenAIEmbedder(ctx["settings"])
     ctx["gateway_factory"] = _make_gateway
+    ctx["retriever_factory"] = _make_retriever
 
 
 class WorkerSettings:
-    functions = [ingest_document, summarize_session]
+    functions = [ingest_document, summarize_session, generate_report]
     cron_jobs = [
         cron(sweep_stuck_documents, minute=set(range(0, 60, 5)), run_at_startup=False),
         cron(sweep_storage_outbox, minute=set(range(0, 60, 5)), run_at_startup=False),
+        cron(sweep_stuck_reports, minute=set(range(0, 60, 5)), run_at_startup=False),
     ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     on_startup = _on_startup
