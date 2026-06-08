@@ -120,14 +120,17 @@ include_external_packages = "true"
 # Dependency stack (CLAUDE.md §3.3): main may import anything; knowledge may
 # import identity (auth) + shared; identity may import shared; shared imports no
 # domain. Reverse imports (e.g. identity -> knowledge) are forbidden.
-name = "Layered architecture: main > conversation > search > knowledge > identity > ai > shared"
+name = "Layered architecture: main > reports > recommendation > conversation > search > knowledge > identity > ai > shared"
 type = "layers"
-# conversation (Phase 4 chat) sits above search: it consumes the retriever, the ai
-# gateway/registry/guardrails, and knowledge schemas — never the reverse. search sits
-# above knowledge; ai sits below the feature domains and above shared. The linear stack
-# forbids upward imports.
+# reports + recommendation (Phase 5 decision outputs) sit above conversation: they consume
+# the retriever (search), the ai gateway/registry/guardrails, and conversation's grounding
+# primitives — never the reverse. conversation (Phase 4 chat) sits above search; search above
+# knowledge; ai below the feature domains and above shared. The linear stack forbids upward
+# imports (reports never imports recommendation and vice versa — neither needs to).
 layers = [
     "src.main",
+    "src.reports",
+    "src.recommendation",
     "src.conversation",
     "src.search",
     "src.knowledge",
@@ -165,6 +168,8 @@ name = "Provider SDKs (openai, litellm, langfuse) only imported by ai adapters"
 type = "forbidden"
 source_modules = [
     "src.main",
+    "src.reports",
+    "src.recommendation",
     "src.conversation",
     "src.search",
     "src.knowledge",

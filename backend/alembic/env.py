@@ -20,6 +20,8 @@ from src.ai import models as ai_models  # noqa: F401
 from src.conversation import models as conversation_models  # noqa: F401
 from src.identity import models  # noqa: F401
 from src.knowledge import models as knowledge_models  # noqa: F401
+from src.recommendation import models as recommendation_models  # noqa: F401
+from src.reports import models as reports_models  # noqa: F401
 from src.shared.database import Base
 
 config = context.config
