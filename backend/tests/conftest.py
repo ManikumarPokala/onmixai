@@ -30,6 +30,20 @@ from src.identity.repository import (
 )
 from src.identity.service import AuthService
 from src.shared.config import Settings, get_embedding_dimension
+from tests.netguard import install_network_guard
+
+# Keep litellm OFFLINE for the whole session: use its bundled model-cost map instead of fetching
+# the remote one (paired with litellm.telemetry = False in tests/ai/conftest.py). This root
+# conftest's body runs before any test module imports litellm, so setting the env here is early
+# enough. Together these stop litellm's background external calls, which otherwise leak/blocked
+# sockets that surface as unraisable ResourceWarnings under filterwarnings=error.
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+
+# Block non-local network from the whole test session: tests must use the in-process stubs /
+# FakeGateway / testcontainers (all local), never a real external service. A stray real call
+# fails fast naming the host, instead of hanging or leaking a socket. Installed before any
+# fixture (incl. testcontainers, which only touches the Docker socket + 127.0.0.1).
+install_network_guard()
 
 BACKEND = Path(__file__).resolve().parents[1]
 
@@ -68,13 +82,14 @@ def _run_migrations(owner_url: str, app_url: str) -> None:
 
 @pytest.fixture(scope="session")
 def pg_container() -> Iterator[dict[str, str]]:
-    with PostgresContainer(
+    container = PostgresContainer(
         "pgvector/pgvector:pg16",
         username=_OWNER,
         password=_OWNER_PW,
         dbname=_DB,
         driver="psycopg",
-    ) as pg:
+    )
+    with container as pg:
         host = pg.get_container_host_ip()
         port = int(pg.get_exposed_port(5432))
         owner_url = f"postgresql+asyncpg://{_OWNER}:{_OWNER_PW}@{host}:{port}/{_DB}"
@@ -82,6 +97,15 @@ def pg_container() -> Iterator[dict[str, str]]:
         _provision_runtime_role(host, port)
         _run_migrations(owner_url, app_url)
         yield {"owner_url": owner_url, "app_url": app_url}
+    # The `with` has stopped the container; now close the docker-py daemon connection it left
+    # open. That connection is an AF_UNIX socket — under filterwarnings=error its unclosed-socket
+    # ResourceWarning, collected during a LATER test, becomes a fatal
+    # PytestUnraisableExceptionWarning. It's order/volume-dependent, which is why it sinks the
+    # full `test` job but not the smaller `isolation` job that uses the same fixture.
+    try:
+        container.get_docker_client().client.close()
+    except Exception:  # noqa: BLE001 — best-effort teardown cleanup; never fail teardown on it
+        pass
 
 
 @pytest.fixture(scope="session")

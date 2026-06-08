@@ -19,6 +19,11 @@ from src.shared.config import Settings
 # closes httpx clients cleanly, so no unclosed ClientSession surfaces as an unraisable
 # warning in a later test under filterwarnings=error.
 litellm.disable_aiohttp_transport = True
+# Keep litellm fully OFFLINE in tests: no anonymous telemetry POSTs and no fetch of the
+# remote model-cost map (LITELLM_LOCAL_MODEL_COST_MAP is set in the root conftest before
+# litellm imports). Those background external calls aren't test traffic — left enabled they
+# leak/blocked sockets that surface as unraisable ResourceWarnings under filterwarnings=error.
+litellm.telemetry = False
 
 _STUB_PATH = Path(__file__).resolve().parents[3] / "infra" / "dev" / "llm_stub.py"
 _VALID_DSN = "postgresql+asyncpg://onmixai:onmixai@localhost:5432/onmixai"
