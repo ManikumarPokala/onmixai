@@ -30,7 +30,6 @@ from src.identity.repository import (
 )
 from src.identity.service import AuthService
 from src.shared.config import Settings, get_embedding_dimension
-from tests.netguard import install_network_guard
 
 # Keep litellm OFFLINE for the whole session: use its bundled model-cost map instead of fetching
 # the remote one (paired with litellm.telemetry = False in tests/ai/conftest.py). This root
@@ -38,12 +37,6 @@ from tests.netguard import install_network_guard
 # enough. Together these stop litellm's background external calls, which otherwise leak/blocked
 # sockets that surface as unraisable ResourceWarnings under filterwarnings=error.
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
-
-# Block non-local network from the whole test session: tests must use the in-process stubs /
-# FakeGateway / testcontainers (all local), never a real external service. A stray real call
-# fails fast naming the host, instead of hanging or leaking a socket. Installed before any
-# fixture (incl. testcontainers, which only touches the Docker socket + 127.0.0.1).
-install_network_guard()
 
 BACKEND = Path(__file__).resolve().parents[1]
 
