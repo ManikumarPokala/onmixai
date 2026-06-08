@@ -395,3 +395,113 @@ button {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* --- recommendations + reports (Phase 5) --- */
+.feature-page {
+  padding: 1.5rem 2rem;
+  max-width: 70ch;
+}
+.feature-page__lead {
+  color: var(--text-dim);
+}
+.rec-form,
+.report-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 1rem 0;
+}
+.rec-form textarea,
+.report-form textarea,
+.report-form input,
+.report-form select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+}
+.rec-outcome {
+  margin-top: 1rem;
+}
+.rec-result {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 1rem 1.2rem;
+}
+.rec-result--declined {
+  background: var(--warn-bg);
+  border-color: var(--warn);
+}
+.rec-result__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.rec-justifications,
+.rec-alternatives {
+  padding-left: 1.1rem;
+}
+.confidence-badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.3rem 0.6rem;
+  background: var(--surface-2);
+  cursor: help;
+}
+.confidence-badge__label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.confidence-badge--high strong {
+  color: #5fd08a;
+}
+.confidence-badge--medium strong {
+  color: var(--warn);
+}
+.confidence-badge--low strong {
+  color: var(--danger);
+}
+
+.reports-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  height: 100%;
+  min-height: 0;
+}
+.report-list {
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.75rem;
+}
+.report-pane {
+  overflow-y: auto;
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+}
+.report {
+  max-width: 75ch;
+}
+.report-status-tag {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+.export-controls {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}

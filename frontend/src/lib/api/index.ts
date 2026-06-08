@@ -13,6 +13,15 @@ export type {
   MessagePage,
   MessageResponse,
   FeedbackRequest,
+  RegisterRequest,
+  RegisterResponse,
+  RecommendationResponse,
+  RecommendationPage,
+  CreateRecommendationRequest,
+  ReportResponse,
+  ReportPage,
+  CreateReportRequest,
+  ExportResponse,
 } from './client'
 export { ApiError, humanMessage } from './errors'
 export type { ErrorCode } from './errors'

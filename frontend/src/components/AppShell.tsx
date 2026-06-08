@@ -21,6 +21,12 @@ export function AppShell() {
           <NavLink to="/chat" className={({ isActive }) => (isActive ? 'is-active' : '')}>
             Chat
           </NavLink>
+          <NavLink to="/recommendations" className={({ isActive }) => (isActive ? 'is-active' : '')}>
+            Recommendations
+          </NavLink>
+          <NavLink to="/reports" className={({ isActive }) => (isActive ? 'is-active' : '')}>
+            Reports
+          </NavLink>
           <NavLink to="/documents" className={({ isActive }) => (isActive ? 'is-active' : '')}>
             Documents
           </NavLink>

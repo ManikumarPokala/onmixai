@@ -17,6 +17,15 @@ export type UpdateSessionRequest = Schemas['UpdateSessionRequest']
 export type FeedbackRequest = Schemas['FeedbackRequest']
 export type TokenResponse = Schemas['TokenResponse']
 export type LoginRequest = Schemas['LoginRequest']
+export type RegisterRequest = Schemas['RegisterRequest']
+export type RegisterResponse = Schemas['RegisterResponse']
+export type RecommendationResponse = Schemas['RecommendationResponse']
+export type RecommendationPage = Schemas['RecommendationPage']
+export type CreateRecommendationRequest = Schemas['CreateRecommendationRequest']
+export type ReportResponse = Schemas['ReportResponse']
+export type ReportPage = Schemas['ReportPage']
+export type CreateReportRequest = Schemas['CreateReportRequest']
+export type ExportResponse = Schemas['ExportResponse']
 
 interface RequestOptions {
   method?: string
@@ -92,6 +101,10 @@ export class ApiClient {
 
   // --- auth (no silent-refresh on these) ---
 
+  register(body: RegisterRequest): Promise<RegisterResponse> {
+    return this.request<RegisterResponse>('/auth/register', { method: 'POST', body, skipRefresh: true })
+  }
+
   login(body: LoginRequest): Promise<TokenResponse> {
     return this.request<TokenResponse>('/auth/login', { method: 'POST', body, skipRefresh: true })
   }
@@ -159,5 +172,55 @@ export class ApiClient {
     }
     if (!response.body) throw new ApiError('INTERNAL_ERROR', 502)
     for await (const event of parseChatStream(response.body)) onEvent(event)
+  }
+
+  // --- recommendations ---
+
+  createRecommendation(body: CreateRecommendationRequest): Promise<RecommendationResponse> {
+    return this.request<RecommendationResponse>('/recommendations', { method: 'POST', body })
+  }
+
+  listRecommendations(cursor?: string, limit = 50): Promise<RecommendationPage> {
+    return this.request<RecommendationPage>('/recommendations', { query: { cursor, limit } })
+  }
+
+  getRecommendation(id: string): Promise<RecommendationResponse> {
+    return this.request<RecommendationResponse>(`/recommendations/${id}`)
+  }
+
+  // --- reports + exports ---
+
+  createReport(body: CreateReportRequest): Promise<ReportResponse> {
+    return this.request<ReportResponse>('/reports', { method: 'POST', body })
+  }
+
+  listReports(cursor?: string, limit = 50): Promise<ReportPage> {
+    return this.request<ReportPage>('/reports', { query: { cursor, limit } })
+  }
+
+  getReport(id: string): Promise<ReportResponse> {
+    return this.request<ReportResponse>(`/reports/${id}`)
+  }
+
+  createExport(reportId: string): Promise<ExportResponse> {
+    return this.request<ExportResponse>(`/reports/${reportId}/exports`, { method: 'POST' })
+  }
+
+  getExport(reportId: string, exportId: string): Promise<ExportResponse> {
+    return this.request<ExportResponse>(`/reports/${reportId}/exports/${exportId}`)
+  }
+
+  /** Download a ready export's PDF as a Blob (authed fetch — the download endpoint requires the
+   * bearer token, so a plain anchor href can't carry it). A non-ready/forbidden export throws. */
+  async downloadExport(reportId: string, exportId: string): Promise<Blob> {
+    const response = await this.raw(
+      `/reports/${reportId}/exports/${exportId}/download`,
+      { method: 'GET' },
+    )
+    if (!response.ok) {
+      const body: unknown = await response.json().catch(() => null)
+      throw apiErrorFromEnvelope(response.status, body)
+    }
+    return response.blob()
   }
 }
