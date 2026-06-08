@@ -15,6 +15,7 @@ class GroundingResult:
     refusal_reason: str | None  # set → refuse; None → grounded
     text: str  # answer with phantom markers stripped
     marker_indices: tuple[int, ...]  # validated 1-based source indices actually cited
+    phantom_count: int  # marker occurrences citing a non-existent source (invention rate)
 
 
 def passes_confidence(
@@ -25,25 +26,37 @@ def passes_confidence(
     return result_count >= min_results and top_score >= min_score
 
 
-def validate_grounding(answer: str, *, num_sources: int) -> GroundingResult:
+def validate_grounding(
+    answer: str, *, num_sources: int, max_phantom_fraction: float
+) -> GroundingResult:
     """Validate inline [n] citation markers against the ``num_sources`` provided sources.
 
     - zero markers → UNGROUNDED_ANSWER (an answer must cite its sources)
-    - markers in 1..num_sources are valid; out-of-range (phantom) markers are stripped
-    - if no valid marker survives → UNGROUNDED_ANSWER
+    - a marker is valid iff 1 ≤ n ≤ num_sources; others are phantom (cite a source that
+      wasn't provided — a faithfulness failure)
+    - if the phantom FRACTION of all markers reaches ``max_phantom_fraction`` (default 0.5
+      = parity with real ones), the answer is majority-fabricated → UNGROUNDED_ANSWER
+    - otherwise phantom markers are stripped and the surviving valid set is cited
 
-    Returns the cleaned text + the sorted unique validated indices. Time: O(len(answer)).
+    Returns the cleaned text, the validated indices, and the phantom occurrence count (for
+    the trace / citation-precision eval). Time: O(len(answer)). Space: O(markers).
     """
     markers = [int(m) for m in _MARKER.findall(answer)]
     if not markers:
-        return GroundingResult("UNGROUNDED_ANSWER", answer, ())
+        return GroundingResult("UNGROUNDED_ANSWER", answer, (), 0)
+
+    phantom_count = sum(1 for n in markers if not 1 <= n <= num_sources)
+    if phantom_count / len(markers) >= max_phantom_fraction:
+        # The model fabricated at least as many citations as it grounded — refuse rather
+        # than serve a majority-fabricated citation set (ADR 0014).
+        return GroundingResult("UNGROUNDED_ANSWER", answer, (), phantom_count)
 
     def _keep_valid(match: re.Match[str]) -> str:
         n = int(match.group(1))
         return match.group(0) if 1 <= n <= num_sources else ""
 
     cleaned = _MARKER.sub(_keep_valid, answer)
-    valid = tuple(sorted({m for m in markers if 1 <= m <= num_sources}))
+    valid = tuple(sorted({n for n in markers if 1 <= n <= num_sources}))
     if not valid:
-        return GroundingResult("UNGROUNDED_ANSWER", cleaned, ())
-    return GroundingResult(None, cleaned, valid)
+        return GroundingResult("UNGROUNDED_ANSWER", cleaned, (), phantom_count)
+    return GroundingResult(None, cleaned, valid, phantom_count)

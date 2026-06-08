@@ -60,3 +60,29 @@ meta → refusal                             (low confidence — refused BEFORE 
 - Persisted citations are always the validated set only — the schema has no "answer
   without validated citations" state (the cite-or-refuse invariant holds in storage,
   not just in flight).
+
+## Refusal vs. error — content failures are not infrastructure failures
+
+A **content** outcome (insufficient sources → `INSUFFICIENT_SOURCES`, ungrounded answer
+→ `UNGROUNDED_ANSWER`) is a typed `Refusal`: persisted as an assistant message and
+counted by the refusal-correctness eval (Task 9). An **infrastructure** failure (provider
+outage, budget block — a gateway `AppError`) is NOT a refusal: it propagates and the SSE
+layer emits a terminal `error` event, persists no assistant row, and leaves the turn
+re-askable (the same shape as a client disconnect). Conflating the two would tell the
+user "I can't answer that" for a retryable outage (so they won't retry) and would pollute
+the refusal-correctness metric with non-content failures. The pipeline return type is
+therefore `AnsweredTurn | Refusal` for content; infrastructure failures are exceptions.
+
+## Phantom-citation faithfulness floor
+
+Phantom markers (citing a source that wasn't provided) are a faithfulness failure, not a
+formatting nit. Stripping the occasional phantom while keeping real citations is fine when
+the answer predominantly stands on real sources; but an answer that fabricates *as many*
+citations as it grounds is majority-invented, and silently stripping could leave a claim
+that was attributed to a fake source reading as a bare assertion. So: if the phantom
+**fraction** of all markers reaches `chat_max_phantom_fraction` (default **0.5** — parity
+with real markers), the whole answer is refused as `UNGROUNDED_ANSWER` rather than served
+with a half-fabricated citation set. Below that fraction, phantoms are stripped and the
+validated set is cited. The `phantom_count` is recorded in the grounding trace so the
+citation-precision eval (Task 9) can measure invention rate, not just final validity. The
+threshold is tunable in Settings.

@@ -165,6 +165,10 @@ class Settings(BaseSettings):
     chat_confidence_min_score: float = 0.0  # below → refuse before generating (Task 5)
     chat_confidence_min_results: int = 1  # fewer retrieved → refuse before generating
     chat_rewrite_max_chars: int = 512  # cap the rewritten retrieval query (sanitization)
+    # Fraction of an answer's citation markers that may be phantom (cite a source that
+    # wasn't provided) before the whole answer is refused as ungrounded. 0.5 = refuse
+    # once fabricated markers reach parity with real ones (ADR 0014). Tunable.
+    chat_max_phantom_fraction: float = 0.5
 
     @field_validator("jwt_secret")
     @classmethod

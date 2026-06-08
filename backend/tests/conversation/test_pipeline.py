@@ -6,6 +6,8 @@ calls), retrieval-empty refusal, generation-failure refusal, and rewrite integra
 
 from uuid import uuid4
 
+import pytest
+
 from src.ai.gateway import UpstreamUnavailableError
 from src.ai.guardrails import Refusal
 from src.ai.prompt_registry import get_prompt_registry
@@ -86,17 +88,26 @@ async def test_zero_marker_answer_is_ungrounded_refusal() -> None:
     assert outcome == Refusal("UNGROUNDED_ANSWER")
 
 
-async def test_phantom_marker_stripped_valid_survives() -> None:
+async def test_minority_phantom_marker_is_stripped_valid_survives() -> None:
     items = [_item("a", 0.9), _item("b", 0.8)]
     fake = FakeGateway()
-    fake.queue_completion(text="Valid claim [1] and a phantom [9] one.")
+    fake.queue_completion(text="Claim [1] and claim [2] but a phantom [9].")  # 1 of 3 phantom
     outcome = await _answer(_pipeline(_FakeRetriever(items), fake))
     assert isinstance(outcome, AnsweredTurn)
-    assert "[1]" in outcome.content and "[9]" not in outcome.content  # phantom stripped
-    assert len(outcome.citations) == 1 and outcome.citations[0].marker_index == 1
+    assert "[9]" not in outcome.content and "[1]" in outcome.content and "[2]" in outcome.content
+    assert len(outcome.citations) == 2
 
 
-async def test_all_phantom_markers_none_survive_is_refusal() -> None:
+async def test_majority_fabricated_citations_are_refused() -> None:
+    # phantom at parity with real (1 of 2) → refuse rather than serve a half-fabricated set
+    items = [_item("a", 0.9), _item("b", 0.8)]
+    fake = FakeGateway()
+    fake.queue_completion(text="Real [1] but fabricated [9].")
+    outcome = await _answer(_pipeline(_FakeRetriever(items), fake))
+    assert outcome == Refusal("UNGROUNDED_ANSWER")
+
+
+async def test_all_phantom_markers_is_refusal() -> None:
     fake = FakeGateway()
     fake.queue_completion(text="Per [9] and [7] the answer is yes.")  # both phantom (2 sources)
     outcome = await _answer(_pipeline(_FakeRetriever([_item("a", 0.9), _item("b", 0.8)]), fake))
@@ -111,11 +122,13 @@ async def test_low_confidence_refuses_before_generation_with_zero_completion_cal
     assert len(fake.calls) == 0  # refused BEFORE any generation spend
 
 
-async def test_generation_failure_is_typed_refusal() -> None:
+async def test_generation_failure_propagates_as_error_not_refusal() -> None:
+    # An infrastructure failure is NOT a content refusal — it propagates (the SSE layer
+    # turns it into an error event; no assistant row; re-askable).
     fake = FakeGateway()
     fake.queue_error(UpstreamUnavailableError())
-    outcome = await _answer(_pipeline(_FakeRetriever([_item("a", 0.9)]), fake))
-    assert outcome == Refusal("GENERATION_FAILED")
+    with pytest.raises(UpstreamUnavailableError):
+        await _answer(_pipeline(_FakeRetriever([_item("a", 0.9)]), fake))
 
 
 async def test_rewrite_result_feeds_retrieval() -> None:

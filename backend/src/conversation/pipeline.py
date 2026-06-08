@@ -3,15 +3,20 @@ assemble → generate → grounding-validate. It consumes only existing ports �
 permission-aware retriever (the ONLY retrieval entry) and the LLM gateway — and adds no
 new provider or retrieval surface.
 
-Cite-or-refuse is absolute: a low-confidence retrieval refuses BEFORE any generation
-spend; a generated answer must carry valid inline [n] citation markers or it is refused;
-phantom markers are stripped and the persisted citations are the validated set only.
-Every outcome is a typed AnsweredTurn or Refusal — never fabricated output.
+Cite-or-refuse is absolute for CONTENT outcomes: a low-confidence retrieval refuses
+BEFORE any generation spend; a generated answer must carry valid inline [n] citation
+markers (and not be majority-fabricated) or it is refused; phantom markers are stripped
+and the persisted citations are the validated set only. A content outcome is a typed
+AnsweredTurn or Refusal — never fabricated output. An INFRASTRUCTURE failure (gateway
+outage, budget block) is NOT a content refusal: it propagates as an AppError so the SSE
+layer emits an `error` event, persists no assistant row, and leaves the turn re-askable.
 """
 
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
+
+import structlog
 
 from src.ai.gateway import GatewayContext, LLMGateway
 from src.ai.guardrails import InjectionFilter, Refusal
@@ -23,7 +28,8 @@ from src.conversation.rewrite import rewrite_query
 from src.identity.schemas import AuthContext
 from src.search.schemas import SearchQuery, SearchResult, SearchResultItem
 from src.shared.config import Settings
-from src.shared.errors import AppError
+
+_logger = structlog.get_logger("conversation.pipeline")
 
 
 class Retriever(Protocol):
@@ -80,7 +86,8 @@ class GroundedAnswerPipeline:
         request_id: str,
     ) -> PipelineOutcome:
         """Run the pipeline. Time: 1 rewrite (skipped on first turn) + 1 retrieval +
-        1 generation, each bounded by its own budget. Returns a typed outcome."""
+        1 generation, each bounded by its own budget. Returns a content outcome
+        (AnsweredTurn | Refusal); raises AppError on a gateway/infrastructure failure."""
         s = self._settings
         rewritten = await rewrite_query(
             history,
@@ -131,12 +138,23 @@ class GroundedAnswerPipeline:
             request_id=request_id,
             source_chunk_ids=tuple(item.chunk_id for item in kept),
         )
-        try:
-            completion = await self._gateway.complete(prompt=prompt, ctx=ctx)
-        except AppError:
-            return Refusal("GENERATION_FAILED")  # typed — never a fabricated answer
+        # A gateway AppError (provider outage, budget block) is an INFRASTRUCTURE failure,
+        # not a content decision — it propagates to the caller (the SSE layer emits an
+        # `error` event, persists no assistant row, and the turn is re-askable). Only
+        # content outcomes (insufficient sources, ungrounded) are Refusal results.
+        completion = await self._gateway.complete(prompt=prompt, ctx=ctx)
 
-        grounding = validate_grounding(completion.text, num_sources=len(kept))
+        grounding = validate_grounding(
+            completion.text,
+            num_sources=len(kept),
+            max_phantom_fraction=s.chat_max_phantom_fraction,
+        )
+        _logger.info(
+            "conversation.grounding",
+            trace_id=completion.trace_id,
+            valid_markers=len(grounding.marker_indices),
+            phantom_markers=grounding.phantom_count,  # invention rate (citation-precision eval)
+        )
         if grounding.refusal_reason is not None:
             return Refusal(grounding.refusal_reason)
 
