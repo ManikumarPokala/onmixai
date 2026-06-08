@@ -173,6 +173,18 @@ class Settings(BaseSettings):
     chat_message_page_size: int = 100  # hard server-side cap on a message-history page
     chat_stream_heartbeat_seconds: float = 15.0  # SSE keep-alive cadence (Task 6)
 
+    # Recommendation / reports (Phase 5). Confidence bands are derived from retrieval evidence
+    # (the sum of the top-k fused scores), never model self-report (ADR 0016). Thresholds are
+    # calibrated to the RRF fused-score scale (search_rrf_k) and satisfy floor ≤ medium ≤ high;
+    # re-tuned against eval data when a real model/corpus is configured.
+    rec_confidence_top_k: int = 5  # results that contribute to the evidence statistic
+    rec_confidence_floor: float = 0.03  # below → decline (INSUFFICIENT_EVIDENCE), no generation
+    rec_confidence_medium: float = 0.06  # ≥ → at least a medium band
+    rec_confidence_high: float = 0.10  # ≥ → a high band
+    rec_retrieval_top_k: int = 20  # candidates retrieved for a recommendation
+    rec_query_max_chars: int = 2000  # bound the recommendation query
+    rec_page_size: int = 50  # hard server-side cap on a recommendations-list page
+
     @field_validator("jwt_secret")
     @classmethod
     def _jwt_secret_long_enough(cls, value: SecretStr) -> SecretStr:

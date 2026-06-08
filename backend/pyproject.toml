@@ -49,6 +49,7 @@ dev = [
     "import-linter==2.11",
     "pip-audit==2.10.0",
     "numpy==2.4.6",  # benchmark corpus generation (tests/benchmarks, ef_search sweep)
+    "hypothesis==6.122.3",  # property tests (confidence-band monotonicity, Phase 5)
 ]
 
 [tool.setuptools.packages.find]
