@@ -1,14 +1,13 @@
-"""Recommendation rules — branch-complete + the confidence-band monotonicity property.
+"""Recommendation rules — branch-complete boundary tests for the confidence band, the decline
+gate, and justification grounding.
 
-Confidence is derived from retrieval evidence and the mapping is non-decreasing: stronger
-retrieval (higher scores, more results, cross-arm agreement) never yields a lower band. The
-decline gate fires on empty/below-floor evidence; justification grounding strips phantom
-markers and declines when any claim loses all support.
+Confidence is derived from retrieval evidence (ADR 0016); the decline gate fires on
+empty/below-floor evidence; justification grounding strips phantom markers and declines when
+any claim loses all support. The monotonicity PROPERTY (the band never decreases as retrieval
+strengthens) is pinned separately in ``test_confidence_property.py`` — exit criterion 1.
 """
 
 import pytest
-from hypothesis import given
-from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from src.recommendation.rules import (
@@ -19,33 +18,9 @@ from src.recommendation.rules import (
 )
 from src.recommendation.schemas import Justification, RecommendationOutput
 
-_SCORE = st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False)
-
 
 def _band(scores: list[float]) -> str | None:
     return confidence_band_from_scores(scores, top_k=5, high=0.10, medium=0.06, floor=0.03)
-
-
-# --- confidence band: monotonicity property ---
-
-
-@given(
-    base=st.lists(_SCORE, min_size=1, max_size=10), deltas=st.lists(_SCORE, min_size=1, max_size=10)
-)
-def test_band_non_decreasing_under_elementwise_improvement(
-    base: list[float], deltas: list[float]
-) -> None:
-    n = min(len(base), len(deltas))
-    weaker = base[:n]
-    stronger = [weaker[i] + deltas[i] for i in range(n)]  # element-wise ≥ weaker
-    assert band_rank(_band(stronger)) >= band_rank(_band(weaker))
-
-
-@given(scores=st.lists(_SCORE, max_size=10), extra=_SCORE)
-def test_band_non_decreasing_with_more_evidence(scores: list[float], extra: float) -> None:
-    fewer = _band(scores)
-    more = _band([*scores, extra])
-    assert band_rank(more) >= band_rank(fewer)  # an extra source never lowers the band
 
 
 # --- confidence band + decline: branches ---

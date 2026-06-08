@@ -82,6 +82,17 @@ def _completion_text(payload: dict) -> str:
         joined = " ".join(str(m.get("content", "")) for m in messages).lower()
         if "faithfulness" in joined:
             return json.dumps({"faithfulness": 1.0, "reason": "deterministic stub score"})
+        if "decision assistant" in joined:  # the recommendation prompt — emit a grounded rec
+            return json.dumps(
+                {
+                    "recommendation": "Based on the sources, proceed with the leading option.",
+                    "alternatives": [{"option": "Defer", "rationale": "await more evidence"}],
+                    "justifications": [
+                        {"claim": "the leading source supports this", "citation_markers": [1]}
+                    ],
+                    "caveats": ["limited to the retrieved corpus"],
+                }
+            )
         return json.dumps({"answer": user[:500]})
     if "Sources:" in user and "Question:" in user:
         return _grounded_completion(user)
@@ -135,6 +146,12 @@ class _Handler(BaseHTTPRequestHandler):
         if payload.get("stream"):
             self._stream(payload, content, prompt_tokens, completion_tokens)
             return
+        # Non-stream structured-call latency model (the recommendation drill): sleep a fixed
+        # per-call delay so a single blocking JSON completion has a representative cost. Default
+        # 0 → the generation/recommendation evals are unaffected.
+        json_ms = int(os.environ.get("STUB_JSON_MS", "0") or "0")
+        if json_ms and (payload.get("response_format") or {}).get("type") == "json_object":
+            time.sleep(json_ms / 1000.0)
         self._json(
             200,
             {
