@@ -45,9 +45,15 @@ the renderer is a pure function `content → bytes`, called from the export work
   re-export produces the same document (the worker's content is the hashed artifact; the
   metadata footer's generated_at is informational, not part of the hashed report body).
 - **Layout ceiling.** fpdf2 has no CSS engine: complex multi-column / richly-styled layouts are
-  out of reach. Our reports (sections + footnotes + footer) don't need them. **Revisit trigger:**
-  if a future report type needs rich layout (charts, multi-column, branded templates), reconsider
-  WeasyPrint with the system-dep cost paid explicitly in CI, or a chromium renderer — this ADR is
+  out of reach. Our reports (sections + footnotes + footer) don't need them, and that simplicity
+  is itself a feature until a requirement forces otherwise. **Revisit trigger (concrete):** the
+  *first customer requirement for branded / rich-layout reports* — logos, multi-column, charts,
+  themed templates — is when WeasyPrint (pay the Pango/Cairo system-dep cost explicitly in CI) or
+  a chromium renderer earns its complexity. Until that signal exists, fpdf2 stays; this ADR is
   updated rather than silently worked around.
+- **Deterministic creation date.** The PDF's internal `/CreationDate` is pinned to a fixed
+  constant so the bytes are deterministic (idempotent re-export). It is NOT the generation
+  time — the real `generated_at` lives in the on-page metadata footer (and the report row's
+  `generation_metadata`). Don't read `/CreationDate` as "when this report was generated".
 - Citations render as a numbered **Sources** list (endnotes) keyed by the same `[n]` markers used
   inline; the metadata footer carries model + prompt version + generated_at on every page.
