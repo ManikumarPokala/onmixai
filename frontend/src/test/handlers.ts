@@ -19,6 +19,7 @@ interface Backend {
   feedback: Record<string, { rating: string; comment: string | null }>
   loginCalls: number
   refreshCalls: number
+  registerCalls: number
 }
 
 function freshBackend(): Backend {
@@ -30,6 +31,7 @@ function freshBackend(): Backend {
     feedback: {},
     loginCalls: 0,
     refreshCalls: 0,
+    registerCalls: 0,
   }
 }
 
@@ -149,6 +151,41 @@ function unauthorized() {
 }
 
 export const handlers = [
+  http.post(`${API}/auth/register`, async ({ request }) => {
+    backend.registerCalls += 1
+    const body = (await request.json()) as { name: string; slug: string; owner_email: string }
+    // A slug already in use is a typed 409 — the backend's only registration conflict
+    // (identity.service raises ConflictError("ORG_SLUG_TAKEN")).
+    if (body.slug === 'taken') {
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'ORG_SLUG_TAKEN',
+            message: 'Organization slug already in use',
+            request_id: 'r',
+          },
+        },
+        { status: 409 },
+      )
+    }
+    const now = new Date().toISOString()
+    return HttpResponse.json(
+      {
+        organization: { id: 'org-1', name: body.name, slug: body.slug, created_at: now },
+        user: {
+          id: 'u-1',
+          org_id: 'org-1',
+          email: body.owner_email,
+          full_name: 'Owner',
+          role: 'owner',
+          is_active: true,
+          created_at: now,
+        },
+      },
+      { status: 201 },
+    )
+  }),
+
   http.post(`${API}/auth/login`, async ({ request }) => {
     backend.loginCalls += 1
     const body = (await request.json()) as { password: string }

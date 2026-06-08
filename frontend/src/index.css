@@ -106,6 +106,21 @@ button {
   padding: 0.5rem 0.7rem;
   margin: 0;
 }
+.auth-switch {
+  text-align: center;
+  margin: 0.25rem 0 0;
+}
+.auth-switch__link {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  text-decoration: underline;
+  padding: 0.25rem;
+}
+.auth-switch__link:hover {
+  color: var(--text);
+}
 
 /* --- app shell --- */
 .app-shell {

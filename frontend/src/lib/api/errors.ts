@@ -12,6 +12,7 @@ export const ERROR_CODES = [
   'INVALID_REFRESH_TOKEN',
   'REFRESH_TOKEN_REUSED',
   'ORGANIZATION_NOT_FOUND',
+  'ORG_SLUG_TAKEN',
   'FORBIDDEN',
   // shared
   'RATE_LIMITED',
@@ -55,6 +56,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   INVALID_REFRESH_TOKEN: 'Your session could not be renewed. Please sign in again.',
   REFRESH_TOKEN_REUSED: 'For your security we signed you out. Please sign in again.',
   ORGANIZATION_NOT_FOUND: 'We could not find that organization.',
+  ORG_SLUG_TAKEN: 'That organization slug is already taken. Please choose another.',
   FORBIDDEN: 'You do not have permission to do that.',
   RATE_LIMITED: 'You are going a little fast — please wait a moment and try again.',
   VALIDATION_ERROR: 'Some of the information provided was invalid.',

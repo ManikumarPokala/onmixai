@@ -9,7 +9,7 @@ export default defineConfig({
     // work without CORS. Override the deployed origin via VITE_API_URL.
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8008',
         changeOrigin: true,
       },
     },
