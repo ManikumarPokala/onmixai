@@ -95,7 +95,10 @@ def test_prod_rejects_nonzero_chaos_delay() -> None:
 
 def test_dev_allows_chaos_delay() -> None:
     settings = _build(
-        env="dev", database_url=VALID_DSN, jwt_secret=STRONG_SECRET, ingest_chaos_delay_seconds=5.0
+        env="dev",
+        database_url=VALID_DSN,
+        jwt_secret=STRONG_SECRET,
+        ingest_chaos_delay_seconds=5.0,
     )
     assert settings.ingest_chaos_delay_seconds == 5.0
 

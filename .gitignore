@@ -32,3 +32,13 @@ backend/package-lock.json
 .idea/
 .vscode/
 *.swp
+
+# Internal docs — only the top-level README.md ships. Planning specs, ADRs, runbooks,
+# benchmarks, and per-domain notes are internal and stay out of the repo. The prompt
+# templates under backend/src/ai/prompts/ are runtime assets (not docs) and are kept.
+/CLAUDE.md
+/SPRINT-*.md
+/docs/
+/frontend/README.md
+backend/src/**/README.md
+backend/tests/**/README.md

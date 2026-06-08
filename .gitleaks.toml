@@ -11,3 +11,11 @@ regexes = [
   '''test-secret-key-at-least-32-characters-long''',
   '''dev-only-insecure-secret-change-me-32\+chars''',
 ]
+# Scoped to one historical commit only. 55f786b carried a pre-reshape line in
+# tests/shared/test_config.py where the generic-api-key rule greedily captured a kwarg tail
+# (`ingest_chaos_delay_seconds=5.0`) off a dense fixture line. The fixture builds Settings from
+# constructed fakes only — no credential. The current tree was reshaped so live code is clean;
+# this allowlists ONLY that one past commit (not the path, not the rule).
+commits = [
+  "55f786b2a5e045f9e96950fe4d6d43a4f325b81c",
+]
