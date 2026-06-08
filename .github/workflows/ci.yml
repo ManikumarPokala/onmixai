@@ -16,6 +16,11 @@ permissions:
 env:
   UV_VERSION: "0.11.19"
   PYTHON_VERSION: "3.12"
+  # Disable the testcontainers Ryuk reaper in CI: its connection socket leaks and surfaces as a
+  # fatal unclosed-socket PytestUnraisableExceptionWarning under filterwarnings=error (it sank
+  # the full `test` job). Runners are ephemeral and torn down after the job, so the reaper isn't
+  # needed. Standard CI practice; local dev keeps Ryuk on.
+  TESTCONTAINERS_RYUK_DISABLED: "true"
 
 defaults:
   run:
