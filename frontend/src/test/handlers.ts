@@ -38,13 +38,79 @@ export let backend: Backend = freshBackend()
 export function resetBackend(): void {
   backend = freshBackend()
   streamFrames = defaultGroundedStream()
+  holdStreamOpen = false
 }
 
 /** Raw SSE frames the next chat send returns. Tests set this to drive each terminal shape. */
 export let streamFrames: string[] = defaultGroundedStream()
+/** When true, the stream stays open after emitting frames (until the client aborts) and
+ * persists nothing — used to test the stop button. */
+export let holdStreamOpen = false
 
 export function setStream(frames: string[]): void {
   streamFrames = frames
+}
+
+export function setHoldStreamOpen(value: boolean): void {
+  holdStreamOpen = value
+}
+
+/** Append the persisted user + assistant rows a content terminal would create, derived from
+ * the scripted frames (mirrors the backend's atomic persist at the terminal). An `error`
+ * stream persists nothing. */
+function persistTurn(sessionId: string, content: string): void {
+  const messages = backend.messages[sessionId]
+  if (!messages) return
+  const hasError = streamFrames.some((f) => f.startsWith('event: error'))
+  if (hasError) return
+  const refusal = streamFrames.find((f) => f.startsWith('event: refusal'))
+  const text = streamFrames
+    .filter((f) => f.startsWith('event: token'))
+    .map((f) => JSON.parse(f.split('data: ')[1]).text as string)
+    .join('')
+  const citationsFrame = streamFrames.find((f) => f.startsWith('event: citations'))
+  const citations = citationsFrame ? JSON.parse(citationsFrame.split('data: ')[1]).items : []
+  const seq = messages.length
+  const now = new Date().toISOString()
+  messages.push({
+    id: `u-${seq}`,
+    seq,
+    role: 'user',
+    content,
+    citations: [],
+    refusal_reason: null,
+    prompt_version: null,
+    model_used: null,
+    created_at: now,
+    feedback: null,
+  })
+  messages.push(
+    refusal
+      ? {
+          id: 'm-assistant',
+          seq: seq + 1,
+          role: 'assistant',
+          content: '',
+          citations: [],
+          refusal_reason: JSON.parse(refusal.split('data: ')[1]).reason,
+          prompt_version: null,
+          model_used: null,
+          created_at: now,
+          feedback: null,
+        }
+      : {
+          id: 'm-assistant',
+          seq: seq + 1,
+          role: 'assistant',
+          content: text,
+          citations,
+          refusal_reason: null,
+          prompt_version: '1.1.0',
+          model_used: 'fake/model',
+          created_at: now,
+          feedback: null,
+        },
+  )
 }
 
 export function sseFrame(event: string, data: unknown): string {
@@ -176,18 +242,23 @@ export const handlers = [
     return HttpResponse.json({ messages, next_cursor: null })
   }),
 
-  http.post(`${API}/chat/sessions/:id/messages`, ({ request }) => {
+  http.post(`${API}/chat/sessions/:id/messages`, async ({ request, params }) => {
     if (!isAuthed(request)) return unauthorized()
+    const sessionId = params.id as string
+    const { content } = (await request.json()) as { content: string }
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         const encoder = new TextEncoder()
         for (const frame of streamFrames) controller.enqueue(encoder.encode(frame))
+        if (holdStreamOpen) return // stay open until the client aborts (stop button)
+        persistTurn(sessionId, content) // mirror the backend's atomic persist at the terminal
         controller.close()
       },
+      cancel() {
+        // Client aborted (disconnect / stop): persist nothing — the turn is re-askable.
+      },
     })
-    return new HttpResponse(stream, {
-      headers: { 'Content-Type': 'text/event-stream' },
-    })
+    return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } })
   }),
 
   http.post(`${API}/chat/messages/:messageId/feedback`, async ({ request, params }) => {

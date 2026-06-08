@@ -363,6 +363,16 @@ button {
   }
 }
 
+.stopped-note {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-style: italic;
+  margin: 0.4rem 0 0;
+}
+.message-content {
+  margin: 0;
+  white-space: pre-wrap;
+}
 .empty-state {
   margin: auto;
   text-align: center;
