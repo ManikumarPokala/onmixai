@@ -135,7 +135,7 @@ jobs:
           enable-cache: true
       - run: uv venv --python ${{ env.PYTHON_VERSION }} .venv
       - run: uv pip install --python .venv -e ".[dev]"
-      - run: .venv/bin/pytest tests/eval -q -s -m "not generation"
+      - run: .venv/bin/pytest tests/eval -q -s -m "not generation and not chat"
 
   eval-generation:
     # Generation golden-set regression gate (Phase 3). Runs the real pipeline (prompt

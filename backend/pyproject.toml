@@ -189,6 +189,7 @@ filterwarnings = ["error"]
 markers = [
     "benchmark: hot-path performance benchmark — runs in the benchmarks CI job, not the default suite",
     "generation: generation golden-set eval — runs in the eval-generation job (make eval-generation), not the retrieval eval",
+    "chat: chat golden-set eval — full rewrite→retrieve→pipeline path vs stub (make eval-chat); not in the default suite",
 ]
 
 [tool.coverage.run]

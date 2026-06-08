@@ -19,6 +19,7 @@ dev/test observability only — tests clear it; never used by the product.
 
 import json
 import os
+import re
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -27,6 +28,12 @@ from typing import Any
 _CREATED = 1_700_000_000
 
 REQUEST_LOG: list[dict[str, Any]] = []
+
+# Distinctive tokens (length ≥ 6) used for the grounded-answer "is this supported?" heuristic.
+_DISTINCTIVE = re.compile(r"[a-z0-9]{6,}")
+# Split a sources block on line-leading [n] markers; a source segment is framed/multi-line
+# (the injection guard wraps each source), so we scan the whole segment, not just its first line.
+_SOURCE_SPLIT = re.compile(r"(?m)^\s*\[(\d+)\]\s*")
 
 
 def _word_count(text: str) -> int:
@@ -40,10 +47,35 @@ def _last_user_content(messages: list[dict]) -> str:
     return str(messages[-1].get("content", "")) if messages else ""
 
 
+def _distinctive_tokens(text: str) -> set[str]:
+    return set(_DISTINCTIVE.findall(text.lower()))
+
+
+def _grounded_completion(user: str) -> str:
+    """Deterministic, grounding-aware answer for a grounded-answer prompt: cite the FIRST
+    numbered source whose content shares a distinctive (≥6-char) token with the question —
+    so an answerable question yields a valid citation to the supporting source. If no source
+    supports the question, return a no-citation answer (the pipeline then refuses it as
+    ungrounded). This makes the chat eval's answerable / refusal split deterministic while
+    exercising the real cite-or-refuse pipeline. Dev-only; never product behavior."""
+    after = user.split("Sources:", 1)[1]
+    sources_block, _, question = after.partition("Question:")
+    question_tokens = _distinctive_tokens(question)
+    parts = _SOURCE_SPLIT.split(sources_block)  # ['', '1', seg1, '2', seg2, ...]
+    for number, segment in zip(parts[1::2], parts[2::2]):
+        if _distinctive_tokens(segment) & question_tokens:
+            return (
+                f"Based on the sources, the answer to “{question.strip()[:160]}” is "
+                f"supported [{number}]."
+            )
+    return "I do not have enough information in the provided sources to answer that question."
+
+
 def _completion_text(payload: dict) -> str:
     """Deterministic, echo-derived answer. In JSON mode, return a valid object: a
     faithfulness score for an eval-judge prompt (so the generation-eval harness gets a
-    deterministic, repeatable score), otherwise an echo answer object."""
+    deterministic, repeatable score), otherwise an echo answer object. A grounded-answer
+    prompt (numbered Sources + Question) is answered grounding-aware (see above)."""
     messages = payload.get("messages", [])
     user = _last_user_content(messages)
     if (payload.get("response_format") or {}).get("type") == "json_object":
@@ -51,6 +83,8 @@ def _completion_text(payload: dict) -> str:
         if "faithfulness" in joined:
             return json.dumps({"faithfulness": 1.0, "reason": "deterministic stub score"})
         return json.dumps({"answer": user[:500]})
+    if "Sources:" in user and "Question:" in user:
+        return _grounded_completion(user)
     return f"stub completion for: {user[:500]}"
 
 
@@ -98,6 +132,9 @@ class _Handler(BaseHTTPRequestHandler):
             _word_count(str(m.get("content", ""))) for m in payload.get("messages", [])
         )
         completion_tokens = _word_count(content)
+        if payload.get("stream"):
+            self._stream(payload, content, prompt_tokens, completion_tokens)
+            return
         self._json(
             200,
             {
@@ -119,6 +156,56 @@ class _Handler(BaseHTTPRequestHandler):
                 },
             },
         )
+
+    def _stream(
+        self, payload: dict, content: str, prompt_tokens: int, completion_tokens: int
+    ) -> None:
+        """Emit the completion as an OpenAI-compatible SSE token stream (so the chat path —
+        gateway ``complete_stream`` → litellm ``stream=True`` → this stub — works in dev and
+        the latency drill measures real first-token / inter-token timing). The delay model is
+        injected via env: ``STUB_STREAM_FIRST_MS`` (time to first token) and
+        ``STUB_STREAM_TOKEN_MS`` (per subsequent token)."""
+        first_ms = int(os.environ.get("STUB_STREAM_FIRST_MS", "0") or "0")
+        token_ms = int(os.environ.get("STUB_STREAM_TOKEN_MS", "0") or "0")
+        model = payload.get("model", "dev-stub")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        words = content.split(" ")
+        for i, word in enumerate(words):
+            delay = first_ms if i == 0 else token_ms
+            if delay:
+                time.sleep(delay / 1000.0)
+            delta = word if i == len(words) - 1 else word + " "
+            self._sse(
+                {
+                    "id": "chatcmpl-stub",
+                    "object": "chat.completion.chunk",
+                    "created": _CREATED,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {"content": delta}, "finish_reason": None}],
+                }
+            )
+        self._sse(
+            {
+                "id": "chatcmpl-stub",
+                "object": "chat.completion.chunk",
+                "created": _CREATED,
+                "model": model,
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                "usage": {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                },
+            }
+        )
+        self.wfile.write(b"data: [DONE]\n\n")
+        self.wfile.flush()
+
+    def _sse(self, obj: dict) -> None:
+        self.wfile.write(f"data: {json.dumps(obj)}\n\n".encode())
+        self.wfile.flush()
 
     def log_message(self, *_args: object) -> None:
         return  # keep the dev log quiet

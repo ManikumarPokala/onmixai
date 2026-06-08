@@ -1,0 +1,70 @@
+name: eval-chat
+
+# Chat golden-set regression gate (Phase 4, CLAUDE.md §9/§11 #10). Runs the full real chat
+# path (rewrite → retrieve → grounded pipeline) over a seeded corpus against the in-process
+# deterministic stub, and gates answerable-recall / refusal-correctness / faithfulness /
+# citation validity. Path-triggered: only the domains that can move the chat metrics, the
+# golden set, the stub, and the harness itself trigger it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/src/conversation/**
+      - backend/src/ai/**
+      - backend/src/search/**
+      - backend/src/knowledge/**
+      - backend/tests/golden/chat_v0.jsonl
+      - backend/tests/eval/test_chat_eval.py
+      - infra/dev/llm_stub.py
+      - .github/workflows/eval-chat.yml
+  pull_request:
+    paths:
+      - backend/src/conversation/**
+      - backend/src/ai/**
+      - backend/src/search/**
+      - backend/src/knowledge/**
+      - backend/tests/golden/chat_v0.jsonl
+      - backend/tests/eval/test_chat_eval.py
+      - infra/dev/llm_stub.py
+      - .github/workflows/eval-chat.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.11.19"
+  PYTHON_VERSION: "3.12"
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  eval-chat:
+    runs-on: ubuntu-latest
+    # create_app() reads config at construction; the real DB is the testcontainer (injected
+    # via dependency override), so DATABASE_URL here is only a placeholder.
+    env:
+      ENV: test
+      DATABASE_URL: postgresql+asyncpg://onmixai_app:onmixai_app@localhost:5432/onmixai
+      JWT_SECRET: test-secret-key-at-least-32-characters-long
+      STORAGE_ENDPOINT: http://localhost:9000
+      STORAGE_ACCESS_KEY: access
+      STORAGE_SECRET_KEY: secret
+      STORAGE_BUCKET: onmixai-test
+      REDIS_URL: redis://localhost:6379/0
+      EMBEDDING_DIMENSION: "8"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv venv --python ${{ env.PYTHON_VERSION }} .venv
+      - run: uv pip install --python .venv -e ".[dev]"
+      - run: .venv/bin/pytest tests/eval -q -s -m chat

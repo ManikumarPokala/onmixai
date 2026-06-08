@@ -6,7 +6,7 @@ BACKEND := backend
 VENV := $(BACKEND)/.venv/bin
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: help install dev test eval-retrieval eval-generation lint typecheck contracts migrate fmt verify
+.PHONY: help install dev test eval-retrieval eval-generation eval-chat lint typecheck contracts migrate fmt verify
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -22,10 +22,13 @@ test: ## Run the full test suite with coverage gate (parser tests run isolated; 
 	cd $(BACKEND) && PYTEST=$(abspath $(VENV))/pytest ./scripts/run-tests.sh
 
 eval-retrieval: ## Retrieval golden-set eval — reports recall@5/MRR, gates >=0.85
-	cd $(BACKEND) && $(abspath $(VENV))/pytest tests/eval -q -s -m "not generation"
+	cd $(BACKEND) && $(abspath $(VENV))/pytest tests/eval -q -s -m "not generation and not chat"
 
 eval-generation: ## Generation golden-set eval — pipeline+judge vs stub, gates faithfulness >=0.9
 	cd $(BACKEND) && $(abspath $(VENV))/pytest tests/eval -q -s -m generation
+
+eval-chat: ## Chat golden-set eval — rewrite→retrieve→pipeline vs stub; reports recall/refusal/faithfulness/citation
+	cd $(BACKEND) && $(abspath $(VENV))/pytest tests/eval -q -s -m chat
 
 lint: ## Ruff lint + format check
 	cd $(BACKEND) && $(abspath $(VENV))/ruff check . && $(abspath $(VENV))/ruff format --check .

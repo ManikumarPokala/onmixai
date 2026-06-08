@@ -1,0 +1,44 @@
+{"id": "ans-01", "kind": "answerable", "query": "What is a Zarvon used for?", "keyword": "Zarvon", "chunk": {"key": "zarvon", "content": "A Zarvon is a small tool kept in a shed near the bay."}}
+{"id": "ans-02", "kind": "answerable", "query": "What is a Brimsel used for?", "keyword": "Brimsel", "chunk": {"key": "brimsel", "content": "A Brimsel is a small tool kept in a shed near the bay."}}
+{"id": "ans-03", "kind": "answerable", "query": "What is a Talquin used for?", "keyword": "Talquin", "chunk": {"key": "talquin", "content": "A Talquin is a small tool kept in a shed near the bay."}}
+{"id": "ans-04", "kind": "answerable", "query": "What is a Dovemar used for?", "keyword": "Dovemar", "chunk": {"key": "dovemar", "content": "A Dovemar is a small tool kept in a shed near the bay."}}
+{"id": "ans-05", "kind": "answerable", "query": "What is a Frenlow used for?", "keyword": "Frenlow", "chunk": {"key": "frenlow", "content": "A Frenlow is a small tool kept in a shed near the bay."}}
+{"id": "ans-06", "kind": "answerable", "query": "What is a Glishon used for?", "keyword": "Glishon", "chunk": {"key": "glishon", "content": "A Glishon is a small tool kept in a shed near the bay."}}
+{"id": "ans-07", "kind": "answerable", "query": "What is a Harnett used for?", "keyword": "Harnett", "chunk": {"key": "harnett", "content": "A Harnett is a small tool kept in a shed near the bay."}}
+{"id": "ans-08", "kind": "answerable", "query": "What is a Iquandor used for?", "keyword": "Iquandor", "chunk": {"key": "iquandor", "content": "A Iquandor is a small tool kept in a shed near the bay."}}
+{"id": "ans-09", "kind": "answerable", "query": "What is a Jasprel used for?", "keyword": "Jasprel", "chunk": {"key": "jasprel", "content": "A Jasprel is a small tool kept in a shed near the bay."}}
+{"id": "ans-10", "kind": "answerable", "query": "What is a Kelborn used for?", "keyword": "Kelborn", "chunk": {"key": "kelborn", "content": "A Kelborn is a small tool kept in a shed near the bay."}}
+{"id": "ans-11", "kind": "answerable", "query": "What is a Lurmeth used for?", "keyword": "Lurmeth", "chunk": {"key": "lurmeth", "content": "A Lurmeth is a small tool kept in a shed near the bay."}}
+{"id": "ans-12", "kind": "answerable", "query": "What is a Marnlet used for?", "keyword": "Marnlet", "chunk": {"key": "marnlet", "content": "A Marnlet is a small tool kept in a shed near the bay."}}
+{"id": "ans-13", "kind": "answerable", "query": "What is a Norveen used for?", "keyword": "Norveen", "chunk": {"key": "norveen", "content": "A Norveen is a small tool kept in a shed near the bay."}}
+{"id": "ans-14", "kind": "answerable", "query": "What is a Ostreen used for?", "keyword": "Ostreen", "chunk": {"key": "ostreen", "content": "A Ostreen is a small tool kept in a shed near the bay."}}
+{"id": "ans-15", "kind": "answerable", "query": "What is a Pelvarn used for?", "keyword": "Pelvarn", "chunk": {"key": "pelvarn", "content": "A Pelvarn is a small tool kept in a shed near the bay."}}
+{"id": "ans-16", "kind": "answerable", "query": "What is a Quendil used for?", "keyword": "Quendil", "chunk": {"key": "quendil", "content": "A Quendil is a small tool kept in a shed near the bay."}}
+{"id": "cite-01", "kind": "citation", "query": "Where is a Rasquen kept?", "keyword": "Rasquen", "chunk": {"key": "rasquen", "content": "A Rasquen is a small tool kept in a shed near the bay."}}
+{"id": "cite-02", "kind": "citation", "query": "Where is a Sundric kept?", "keyword": "Sundric", "chunk": {"key": "sundric", "content": "A Sundric is a small tool kept in a shed near the bay."}}
+{"id": "cite-03", "kind": "citation", "query": "Where is a Tavleen kept?", "keyword": "Tavleen", "chunk": {"key": "tavleen", "content": "A Tavleen is a small tool kept in a shed near the bay."}}
+{"id": "cite-04", "kind": "citation", "query": "Where is a Ulmoret kept?", "keyword": "Ulmoret", "chunk": {"key": "ulmoret", "content": "A Ulmoret is a small tool kept in a shed near the bay."}}
+{"id": "cite-05", "kind": "citation", "query": "Where is a Vexlong kept?", "keyword": "Vexlong", "chunk": {"key": "vexlong", "content": "A Vexlong is a small tool kept in a shed near the bay."}}
+{"id": "cite-06", "kind": "citation", "query": "Where is a Welkadi kept?", "keyword": "Welkadi", "chunk": {"key": "welkadi", "content": "A Welkadi is a small tool kept in a shed near the bay."}}
+{"id": "cite-07", "kind": "citation", "query": "Where is a Xanthel kept?", "keyword": "Xanthel", "chunk": {"key": "xanthel", "content": "A Xanthel is a small tool kept in a shed near the bay."}}
+{"id": "cite-08", "kind": "citation", "query": "Where is a Yarbion kept?", "keyword": "Yarbion", "chunk": {"key": "yarbion", "content": "A Yarbion is a small tool kept in a shed near the bay."}}
+{"id": "follow-01", "kind": "followup", "history": [["user", "Tell me about the Zephrin."], ["assistant", "The Zephrin is a tool people ask about."]], "query": "And where is a Zephrin kept?", "keyword": "Zephrin", "chunk": {"key": "zephrin", "content": "A Zephrin is a small tool kept in a shed near the bay."}}
+{"id": "follow-02", "kind": "followup", "history": [["user", "Tell me about the Brackel."], ["assistant", "The Brackel is a tool people ask about."]], "query": "And where is a Brackel kept?", "keyword": "Brackel", "chunk": {"key": "brackel", "content": "A Brackel is a small tool kept in a shed near the bay."}}
+{"id": "follow-03", "kind": "followup", "history": [["user", "Tell me about the Crundle."], ["assistant", "The Crundle is a tool people ask about."]], "query": "And where is a Crundle kept?", "keyword": "Crundle", "chunk": {"key": "crundle", "content": "A Crundle is a small tool kept in a shed near the bay."}}
+{"id": "follow-04", "kind": "followup", "history": [["user", "Tell me about the Dwimber."], ["assistant", "The Dwimber is a tool people ask about."]], "query": "And where is a Dwimber kept?", "keyword": "Dwimber", "chunk": {"key": "dwimber", "content": "A Dwimber is a small tool kept in a shed near the bay."}}
+{"id": "follow-05", "kind": "followup", "history": [["user", "Tell me about the Estavon."], ["assistant", "The Estavon is a tool people ask about."]], "query": "And where is a Estavon kept?", "keyword": "Estavon", "chunk": {"key": "estavon", "content": "A Estavon is a small tool kept in a shed near the bay."}}
+{"id": "follow-06", "kind": "followup", "history": [["user", "Tell me about the Flornik."], ["assistant", "The Flornik is a tool people ask about."]], "query": "And where is a Flornik kept?", "keyword": "Flornik", "chunk": {"key": "flornik", "content": "A Flornik is a small tool kept in a shed near the bay."}}
+{"id": "follow-07", "kind": "followup", "history": [["user", "Tell me about the Gavreth."], ["assistant", "The Gavreth is a tool people ask about."]], "query": "And where is a Gavreth kept?", "keyword": "Gavreth", "chunk": {"key": "gavreth", "content": "A Gavreth is a small tool kept in a shed near the bay."}}
+{"id": "follow-08", "kind": "followup", "history": [["user", "Tell me about the Hulonic."], ["assistant", "The Hulonic is a tool people ask about."]], "query": "And where is a Hulonic kept?", "keyword": "Hulonic", "chunk": {"key": "hulonic", "content": "A Hulonic is a small tool kept in a shed near the bay."}}
+{"id": "unans-01", "kind": "unanswerable", "query": "What is a Plonkix used for?", "keyword": "Plonkix"}
+{"id": "unans-02", "kind": "unanswerable", "query": "What is a Wradnel used for?", "keyword": "Wradnel"}
+{"id": "unans-03", "kind": "unanswerable", "query": "What is a Splent used for?", "keyword": "Splent"}
+{"id": "unans-04", "kind": "unanswerable", "query": "What is a Krquoll used for?", "keyword": "Krquoll"}
+{"id": "unans-05", "kind": "unanswerable", "query": "What is a Vimbert used for?", "keyword": "Vimbert"}
+{"id": "unans-06", "kind": "unanswerable", "query": "What is a Zanduke used for?", "keyword": "Zanduke"}
+{"id": "unans-07", "kind": "unanswerable", "query": "What is a Morbeth used for?", "keyword": "Morbeth"}
+{"id": "unans-08", "kind": "unanswerable", "query": "What is a Cthandle used for?", "keyword": "Cthandle"}
+{"id": "unans-09", "kind": "unanswerable", "query": "What is a Flurnip used for?", "keyword": "Flurnip"}
+{"id": "unans-10", "kind": "unanswerable", "query": "What is a Grobeck used for?", "keyword": "Grobeck"}
+{"id": "unans-11", "kind": "unanswerable", "query": "What is a Hesquim used for?", "keyword": "Hesquim"}
+{"id": "unans-12", "kind": "unanswerable", "query": "What is a Jankrol used for?", "keyword": "Jankrol"}
