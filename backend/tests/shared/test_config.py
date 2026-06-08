@@ -35,7 +35,15 @@ def _build(**overrides: Any) -> Settings:
     return Settings(_env_file=None, **{**_INFRA_DEFAULTS, **overrides})
 
 
-def test_loads_from_env_example() -> None:
+def test_loads_from_env_example(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Verify .env.example itself parses to the documented defaults. pydantic-settings reads the
+    # OS environment OVER _env_file, so clear every var the file defines first — otherwise an
+    # ambient/CI value (e.g. the test job's ENV=test) shadows the file and this asserts the
+    # environment, not the example.
+    for raw in ENV_EXAMPLE.read_text().splitlines():
+        line = raw.strip()
+        if line and not line.startswith("#") and "=" in line:
+            monkeypatch.delenv(line.split("=", 1)[0].strip(), raising=False)
     settings = Settings(_env_file=str(ENV_EXAMPLE))
     assert settings.env == "dev"
     assert settings.jwt_algorithm == "HS256"
