@@ -185,6 +185,12 @@ class Settings(BaseSettings):
     rec_query_max_chars: int = 2000  # bound the recommendation query
     rec_page_size: int = 50  # hard server-side cap on a recommendations-list page
 
+    report_retrieval_top_k: int = 30  # candidates retrieved for a report
+    report_min_sources: int = 2  # fewer retrieved → the graph declines (INSUFFICIENT_EVIDENCE)
+    report_page_size: int = 50  # hard server-side cap on a reports-list page
+    report_max_attempts: int = 3  # bounded retry before a report is marked FAILED
+    report_claim_timeout_seconds: int = 600  # a claim older than this is swept + requeued
+
     @field_validator("jwt_secret")
     @classmethod
     def _jwt_secret_long_enough(cls, value: SecretStr) -> SecretStr:

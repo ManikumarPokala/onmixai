@@ -1,0 +1,9 @@
+name: report_executive_summary
+version: 1.0.0
+owner_feature: report
+variables:
+  sources: str
+  query: str
+body_sha256: aea72b06ce1e3c91928f49ef0943b30b0d36d253f86b1fff4cb8e0f0e3f7c17e
+changelog:
+  - "1.0.0: initial executive-summary report template (grounded sections, cite-or-drop)"

@@ -33,6 +33,7 @@ dependencies = [
     "openai==2.41.0",
     "litellm==1.88.0",
     "langfuse==4.7.1",
+    "langgraph==0.2.76",  # fixed report-generation graph (Phase 5, ADR 0017)
     "pyyaml==6.0.3",
 ]
 
@@ -191,7 +192,11 @@ allow_indirect_imports = "true"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # langgraph 0.2.x emits this on import via its checkpoint serde; we don't use checkpoints.
+    "ignore:The default value of .allowed_objects.:Warning",
+]
 markers = [
     "benchmark: hot-path performance benchmark — runs in the benchmarks CI job, not the default suite",
     "generation: generation golden-set eval — runs in the eval-generation job (make eval-generation), not the retrieval eval",

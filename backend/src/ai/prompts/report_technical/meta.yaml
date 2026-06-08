@@ -1,0 +1,9 @@
+name: report_technical
+version: 1.0.0
+owner_feature: report
+variables:
+  sources: str
+  query: str
+body_sha256: 6badd8a1dce94012df276e8952fb872f2573dea31d4cdcd15ca0e156b5142581
+changelog:
+  - "1.0.0: initial technical report template (grounded sections, cite-or-drop)"

@@ -1,0 +1,9 @@
+name: report_recommendation
+version: 1.0.0
+owner_feature: report
+variables:
+  sources: str
+  query: str
+body_sha256: 60f90c2ac2be0323a52ba001ea14b6994f65f4f2641069905f5f17844cb25488
+changelog:
+  - "1.0.0: initial recommendation report template (grounded sections, cite-or-drop)"
