@@ -82,6 +82,10 @@ services:
       # no account); point at a real OpenAI-compatible endpoint to use a real model.
       LLM_BASE_URL: ${LLM_BASE_URL:-http://llm-stub:8000/v1}
       LLM_API_KEY: ${LLM_API_KEY:-dev-stub-no-auth}
+      # Embeddings configuration. Point at a real OpenAI-compatible endpoint by exporting
+      # EMBEDDING_BASE_URL/EMBEDDING_API_KEY.
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://embeddings-stub:8000/v1}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-dev-stub-no-auth}
     # Host port defaults to 8008 (8000 is commonly occupied); container stays 8000.
     ports:
       - "${API_HOST_PORT:-8008}:8000"
@@ -94,6 +98,8 @@ services:
         condition: service_healthy
       llm-stub:
         condition: service_healthy
+      embeddings-stub:
+        condition: service_healthy
 
   worker:
     # Same image as the API, run as the ARQ ingestion worker (+ sweeper cron).
@@ -101,19 +107,10 @@ services:
       context: ../backend
       dockerfile: Dockerfile
     command: ["arq", "src.worker.WorkerSettings"]
-    # The worker builds the embedder at startup. By default it targets the local
-    # dev embeddings stub (no external account, deterministic vectors). Point at a
-    # real OpenAI-compatible endpoint by exporting EMBEDDING_BASE_URL/EMBEDDING_API_KEY
-    # (same ${VAR:-default} dev-default pattern as JWT_SECRET above) — no key is
-    # hardcoded; the stub ignores auth, so the default key is a placeholder.
     environment:
       <<: *app_environment
-      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://embeddings-stub:8000/v1}
-      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-dev-stub-no-auth}
     depends_on:
       <<: *app_depends
-      embeddings-stub:
-        condition: service_healthy
 
   embeddings-stub:
     # DEV ONLY. OpenAI-compatible embeddings endpoint returning deterministic
