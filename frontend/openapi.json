@@ -1,6 +1,26 @@
 {
   "components": {
     "schemas": {
+      "Alternative": {
+        "additionalProperties": false,
+        "description": "A considered-but-not-chosen option and why.",
+        "properties": {
+          "option": {
+            "title": "Option",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "option",
+          "rationale"
+        ],
+        "title": "Alternative",
+        "type": "object"
+      },
       "Body_create_version_api_v1_documents__document_id__versions_post": {
         "properties": {
           "file": {
@@ -79,6 +99,54 @@
         "title": "Citation",
         "type": "object"
       },
+      "CitationOut": {
+        "description": "A justification's citation resolved to its source (hydrated for the UI).",
+        "properties": {
+          "chunk_id": {
+            "format": "uuid",
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "marker_index": {
+            "title": "Marker Index",
+            "type": "integer"
+          },
+          "page_ref": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Ref"
+          }
+        },
+        "required": [
+          "marker_index",
+          "chunk_id",
+          "document_id",
+          "collection_id",
+          "filename"
+        ],
+        "title": "CitationOut",
+        "type": "object"
+      },
       "CollectionCreate": {
         "properties": {
           "description": {
@@ -138,6 +206,38 @@
           "created_at"
         ],
         "title": "CollectionResponse",
+        "type": "object"
+      },
+      "ConfidenceBand": {
+        "enum": [
+          "high",
+          "medium",
+          "low"
+        ],
+        "title": "ConfidenceBand",
+        "type": "string"
+      },
+      "CreateRecommendationRequest": {
+        "properties": {
+          "collection_scope": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Collection Scope",
+            "type": "array"
+          },
+          "query": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "CreateRecommendationRequest",
         "type": "object"
       },
       "CreateSessionRequest": {
@@ -320,6 +420,30 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Justification": {
+        "additionalProperties": false,
+        "description": "A claim supporting the recommendation, grounded in \u22651 numbered source.",
+        "properties": {
+          "citation_markers": {
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "title": "Citation Markers",
+            "type": "array"
+          },
+          "claim": {
+            "title": "Claim",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "citation_markers"
+        ],
+        "title": "Justification",
         "type": "object"
       },
       "LoginRequest": {
@@ -536,6 +660,146 @@
         ],
         "title": "PermissionGrant",
         "type": "object"
+      },
+      "RecommendationPage": {
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendationResponse"
+            },
+            "title": "Recommendations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recommendations",
+          "next_cursor"
+        ],
+        "title": "RecommendationPage",
+        "type": "object"
+      },
+      "RecommendationResponse": {
+        "description": "A recommendation outcome \u2014 completed (band + grounded output + citations) or declined\n(a reason). A decline is a valid 200 outcome, distinguished by ``status``.",
+        "properties": {
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/Alternative"
+            },
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Caveats",
+            "type": "array"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/CitationOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "confidence_band": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfidenceBand"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decline_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decline Reason"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "justifications": {
+            "items": {
+              "$ref": "#/components/schemas/Justification"
+            },
+            "title": "Justifications",
+            "type": "array"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "recommendation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RecommendationStatus"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "confidence_band",
+          "recommendation",
+          "alternatives",
+          "justifications",
+          "caveats",
+          "citations",
+          "decline_reason",
+          "prompt_version",
+          "created_at"
+        ],
+        "title": "RecommendationResponse",
+        "type": "object"
+      },
+      "RecommendationStatus": {
+        "enum": [
+          "completed",
+          "declined"
+        ],
+        "title": "RecommendationStatus",
+        "type": "string"
       },
       "RefreshRequest": {
         "properties": {
@@ -1970,6 +2234,155 @@
           }
         ],
         "summary": "Read Current Org"
+      }
+    },
+    "/api/v1/recommendations": {
+      "get": {
+        "operationId": "list_recommendations_api_v1_recommendations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Recommendations"
+      },
+      "post": {
+        "operationId": "create_recommendation_api_v1_recommendations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRecommendationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Recommendation"
+      }
+    },
+    "/api/v1/recommendations/{recommendation_id}": {
+      "get": {
+        "operationId": "get_recommendation_api_v1_recommendations__recommendation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recommendation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Recommendation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Recommendation"
       }
     },
     "/api/v1/search": {

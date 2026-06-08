@@ -17,6 +17,7 @@ from src.shared.errors import RateLimitedError, render_app_error
 
 AUTH_RATE_LIMIT = "10/minute"
 CHAT_RATE_LIMIT = "30/minute"
+RECOMMENDATION_RATE_LIMIT = "20/minute"
 
 
 def _rate_limit_key(request: Request) -> str:

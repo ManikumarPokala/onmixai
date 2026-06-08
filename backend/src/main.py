@@ -12,6 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from src.conversation.router import router as conversation_router
 from src.identity.router import router as identity_router
 from src.knowledge.router import router as knowledge_router
+from src.recommendation.router import router as recommendation_router
 from src.search.router import router as search_router
 from src.shared.config import get_settings
 from src.shared.database import dispose_engine
@@ -50,5 +51,6 @@ def create_app() -> FastAPI:
     app.include_router(knowledge_router, prefix=API_PREFIX)
     app.include_router(search_router, prefix=API_PREFIX)
     app.include_router(conversation_router, prefix=API_PREFIX)
+    app.include_router(recommendation_router, prefix=API_PREFIX)
     app.include_router(health_router)
     return app
