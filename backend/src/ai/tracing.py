@@ -5,7 +5,7 @@ decorator so features cannot bypass it; a provider SDK (langfuse) is confined to
 production exporter.
 """
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from time import monotonic
@@ -21,6 +21,8 @@ from src.ai.gateway import (
     LLMGateway,
     ModelRef,
     RenderedPrompt,
+    StreamDone,
+    StreamEvent,
 )
 from src.ai.models import UsageFeature
 from src.shared.errors import AppError
@@ -118,6 +120,27 @@ class TracingGateway:
             raise
         self._tracer.record_completion(self._trace(ctx, prompt, started, completion=completion))
         return completion
+
+    async def complete_stream(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        ctx: GatewayContext,
+        model: ModelRef | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        started = monotonic()
+        try:
+            async for event in self._inner.complete_stream(prompt=prompt, ctx=ctx, model=model):
+                if isinstance(event, StreamDone):
+                    self._tracer.record_completion(
+                        self._trace(ctx, prompt, started, completion=event.completion)
+                    )
+                yield event
+        except AppError as exc:
+            self._tracer.record_completion(
+                self._trace(ctx, prompt, started, model=model, error=type(exc).__name__)
+            )
+            raise
 
     def _trace(
         self,

@@ -7,6 +7,7 @@ error taxonomy follows patterns.md §9: a typed result for every outcome, never 
 and never fabricated output on failure.
 """
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
@@ -120,6 +121,24 @@ class GuardrailViolationError(AppError):
         super().__init__(code=code, status=422, message=message, detail=detail)
 
 
+@dataclass(frozen=True, slots=True)
+class TextDelta:
+    """A streamed token delta."""
+
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class StreamDone:
+    """Terminal stream event carrying the assembled completion (text + token counts +
+    trace_id) — the same metering/tracing data a non-streamed completion produces."""
+
+    completion: Completion
+
+
+StreamEvent = TextDelta | StreamDone
+
+
 class LLMGateway(Protocol):
     """The one interface to every LLM. Implementations own routing, bounded retry,
     fallback, circuit-breaking, metering, budget enforcement, tracing, and structured-
@@ -133,3 +152,15 @@ class LLMGateway(Protocol):
         model: ModelRef | None = None,
         response_schema: type[BaseModel] | None = None,
     ) -> Completion: ...
+
+    def complete_stream(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        ctx: GatewayContext,
+        model: ModelRef | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream a completion as ``TextDelta`` events, ending with one ``StreamDone``.
+        Metering + tracing happen on completion (the StreamDone), exactly as for
+        ``complete`` — grounding validation runs on the assembled text (ADR 0014)."""
+        ...

@@ -10,7 +10,7 @@ is blocked. No mid-stream truncation. Failed calls (the inner gateway raised) me
 nothing — only a successful completion's tokens count.
 """
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 
 import structlog
@@ -23,8 +23,10 @@ from src.ai.gateway import (
     LLMGateway,
     ModelRef,
     RenderedPrompt,
+    StreamDone,
+    StreamEvent,
 )
-from src.ai.models import BudgetPeriod
+from src.ai.models import BudgetPeriod, TokenBudget
 from src.ai.repository import TokenBudgetRepository, TokenUsageRepository
 from src.ai.rules import crossed_soft_threshold, monthly_period_start
 from src.shared.audit import AuditEmitter
@@ -66,20 +68,46 @@ class MeteringGateway:
         """Enforce budget → delegate → record. Raises ``BudgetExceededError`` (429)
         before any spend when over the hard cap. Time: O(1) budget check + the inner
         call + O(1) record."""
+        period_start, budget = await self._pre_check(ctx)
+        completion = await self._inner.complete(
+            prompt=prompt, ctx=ctx, model=model, response_schema=response_schema
+        )
+        await self._record(ctx, completion, period_start, budget)
+        return completion
+
+    async def complete_stream(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        ctx: GatewayContext,
+        model: ModelRef | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream with the SAME pre-call hard-cap block and exact post-call metering
+        (recorded on the terminal StreamDone) as ``complete``."""
+        period_start, budget = await self._pre_check(ctx)
+        async for event in self._inner.complete_stream(prompt=prompt, ctx=ctx, model=model):
+            if isinstance(event, StreamDone):
+                await self._record(ctx, event.completion, period_start, budget)
+            yield event
+
+    async def _pre_check(self, ctx: GatewayContext) -> tuple[datetime, TokenBudget | None]:
         period_start = monthly_period_start(self._clock())
         budget = await self._budgets.get(ctx.org_id, BudgetPeriod.MONTHLY)
-
         if budget is not None:
             current = await self._usage.period_total(ctx.org_id, period_start)
             if current >= budget.limit_tokens:
                 raise BudgetExceededError(
                     detail=f"org {ctx.org_id} period total {current} >= limit {budget.limit_tokens}"
                 )
+        return period_start, budget
 
-        completion = await self._inner.complete(
-            prompt=prompt, ctx=ctx, model=model, response_schema=response_schema
-        )
-
+    async def _record(
+        self,
+        ctx: GatewayContext,
+        completion: Completion,
+        period_start: datetime,
+        budget: TokenBudget | None,
+    ) -> None:
         await self._usage.add_event(
             org_id=ctx.org_id,
             user_id=ctx.user_id,
@@ -94,7 +122,6 @@ class MeteringGateway:
         new_total = await self._usage.increment_period(
             ctx.org_id, period_start, completion.total_tokens
         )
-
         if budget is not None and crossed_soft_threshold(
             new_total, budget.limit_tokens, budget.soft_threshold_pct
         ):
@@ -113,4 +140,3 @@ class MeteringGateway:
                     period_total=new_total,
                     limit_tokens=budget.limit_tokens,
                 )
-        return completion

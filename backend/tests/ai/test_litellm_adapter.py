@@ -17,6 +17,8 @@ from src.ai.gateway import (
     GatewayContext,
     ModelRef,
     RenderedPrompt,
+    StreamDone,
+    TextDelta,
     UpstreamRejectedError,
     UpstreamUnavailableError,
 )
@@ -180,3 +182,49 @@ async def test_structured_output_rejects_after_failed_reask() -> None:
         await gw.complete(prompt=_prompt(), ctx=_ctx(), response_schema=_Answer)
     assert exc_info.value.code == "SCHEMA_VALIDATION_FAILED"
     assert len(fake.calls) == 2  # one re-ask only, then a typed rejection
+
+
+# --- streaming (ADR 0014) ---
+
+
+class _FakeStream:
+    """An async-iterable provider stream yielding delta chunks (None content tolerated)."""
+
+    def __init__(self, deltas: list[str | None]) -> None:
+        self._deltas = deltas
+
+    async def __aiter__(self) -> Any:
+        for delta in self._deltas:
+            yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=delta))])
+
+
+async def test_complete_stream_yields_deltas_then_terminal_done() -> None:
+    async def acompletion(**kwargs: Any) -> Any:
+        assert kwargs["stream"] is True and kwargs["num_retries"] == 0
+        return _FakeStream(["Hel", "lo", None])  # a None delta is skipped, not emitted
+
+    gw = _gateway(llm_settings("http://x"), acompletion)
+    events = [event async for event in gw.complete_stream(prompt=_prompt(), ctx=_ctx())]
+
+    texts = [e.text for e in events if isinstance(e, TextDelta)]
+    assert "".join(texts) == "Hello"
+    done = events[-1]
+    assert isinstance(done, StreamDone)
+    assert done.completion.text == "Hello" and done.completion.finish_reason == "stop"
+
+
+async def test_complete_stream_classifies_retryable_as_unavailable() -> None:
+    async def acompletion(**kwargs: Any) -> Any:
+        raise litellm.ServiceUnavailableError("down", "openai", "m")
+
+    breaker = CircuitBreaker(failure_threshold=1, reset_seconds=60)
+    gw = LiteLLMGateway(
+        settings=llm_settings("http://x"),
+        configs=NoModelConfig(),
+        breaker=breaker,
+        acompletion=acompletion,
+        sleep=_noop_sleep,
+    )
+    with pytest.raises(UpstreamUnavailableError):
+        async for _ in gw.complete_stream(prompt=_prompt(), ctx=_ctx()):
+            pass

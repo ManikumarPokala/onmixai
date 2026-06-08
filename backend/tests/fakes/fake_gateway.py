@@ -4,11 +4,20 @@ recorded call (prompt + version, context, model). Same-input → same default ou
 so tests are deterministic without a network."""
 
 import asyncio
-from dataclasses import dataclass
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 
 from pydantic import BaseModel
 
-from src.ai.gateway import Completion, GatewayContext, ModelRef, RenderedPrompt
+from src.ai.gateway import (
+    Completion,
+    GatewayContext,
+    ModelRef,
+    RenderedPrompt,
+    StreamDone,
+    StreamEvent,
+    TextDelta,
+)
 
 
 @dataclass(frozen=True)
@@ -25,10 +34,20 @@ class _Outcome:
     delay_s: float
 
 
+@dataclass
+class _StreamScript:
+    tokens: list[str]
+    completion: Completion
+    error: Exception | None  # raised before the first token, if set
+    cancelled: bool = field(default=False)  # set if the consumer cancelled mid-stream
+
+
 class FakeGateway:
     def __init__(self) -> None:
         self.calls: list[RecordedCall] = []
+        self.stream_calls: list[RecordedCall] = []
         self._script: list[_Outcome] = []
+        self._stream_script: list[_StreamScript] = []
         self._counter = 0
 
     def queue_completion(
@@ -55,6 +74,31 @@ class FakeGateway:
     def queue_error(self, error: Exception, *, delay_s: float = 0.0) -> None:
         self._script.append(_Outcome(error, delay_s))
 
+    def queue_stream(
+        self,
+        tokens: list[str],
+        *,
+        model_used: str = "fake/model",
+        prompt_tokens: int = 10,
+        trace_id: str | None = None,
+        error: Exception | None = None,
+    ) -> _StreamScript:
+        """Script a streamed completion: ``tokens`` are yielded as deltas, then a
+        StreamDone with the joined text. ``error`` raises before the first token.
+        Returns the script so a test can later read whether it was cancelled."""
+        text = "".join(tokens)
+        completion = Completion(
+            text=text,
+            model_used=model_used,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=max(1, len(text.split())),
+            finish_reason="stop",
+            trace_id=trace_id or f"fake-stream-{len(self._stream_script)}",
+        )
+        script = _StreamScript(tokens=list(tokens), completion=completion, error=error)
+        self._stream_script.append(script)
+        return script
+
     async def complete(
         self,
         *,
@@ -74,6 +118,29 @@ class FakeGateway:
         if isinstance(outcome.result, Exception):
             raise outcome.result
         return outcome.result
+
+    async def complete_stream(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        ctx: GatewayContext,
+        model: ModelRef | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        self.stream_calls.append(RecordedCall(prompt, ctx, model, None))
+        script = (
+            self._stream_script.pop(0)
+            if self._stream_script
+            else self.queue_stream(["fake ", "stream"])
+        )
+        if script.error is not None:
+            raise script.error
+        try:
+            for token in script.tokens:
+                yield TextDelta(token)
+            yield StreamDone(script.completion)
+        except GeneratorExit:
+            script.cancelled = True  # the consumer cancelled mid-stream (disconnect drill)
+            raise
 
     def _default_completion(self, prompt: RenderedPrompt, model: ModelRef | None) -> Completion:
         user_text = " ".join(m.content for m in prompt.messages if m.role == "user")

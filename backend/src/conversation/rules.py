@@ -1,11 +1,16 @@
 """Pure conversation rules (no I/O) — ownership, lifecycle, message validation, title
-derivation, sequencing. Each is independently branch-testable (patterns.md §4). Limits
-are passed in by the service from Settings (no magic numbers here)."""
+derivation, sequencing, and cursor codec. Each is independently branch-testable
+(patterns.md §4). Limits are passed in by the service from Settings (no magic numbers
+here)."""
 
+import base64
+import binascii
+from datetime import datetime
 from uuid import UUID
 
 from src.conversation.exceptions import (
     EmptyMessageError,
+    InvalidCursorError,
     MessageTooLongError,
     SessionArchivedError,
     SessionLimitExceededError,
@@ -61,3 +66,22 @@ def derive_title(first_user_message: str) -> str:
 def next_seq(current_max: int | None) -> int:
     """The next per-session message seq (0-based, monotonic). Time/Space: O(1)."""
     return 0 if current_max is None else current_max + 1
+
+
+def encode_session_cursor(last_message_at: datetime, session_id: UUID) -> str:
+    """Opaque keyset cursor over the (last_message_at DESC, id DESC) session ordering.
+    Time/Space: O(1)."""
+    raw = f"{last_message_at.isoformat()}|{session_id}".encode()
+    return base64.urlsafe_b64encode(raw).decode()
+
+
+def decode_session_cursor(cursor: str) -> tuple[datetime, UUID]:
+    """Inverse of :func:`encode_session_cursor`. Raises INVALID_CURSOR on any malformed
+    input (bad base64, missing separator, unparseable datetime/UUID) — never a 500.
+    Time/Space: O(1)."""
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+        ts_str, id_str = raw.split("|", 1)
+        return datetime.fromisoformat(ts_str), UUID(id_str)
+    except (binascii.Error, ValueError, UnicodeDecodeError) as exc:
+        raise InvalidCursorError(detail="could not decode session cursor") from exc

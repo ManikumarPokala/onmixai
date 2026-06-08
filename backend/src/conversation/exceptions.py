@@ -29,3 +29,13 @@ class EmptyMessageError(AppError):
 class SessionLimitExceededError(AppError):
     def __init__(self, *, detail: str | None = None) -> None:
         super().__init__("SESSION_LIMIT_EXCEEDED", 409, "Chat session limit reached", detail)
+
+
+class InvalidCursorError(AppError):
+    def __init__(self, *, detail: str | None = None) -> None:
+        super().__init__("INVALID_CURSOR", 422, "Pagination cursor is malformed", detail)
+
+
+class MessageNotFoundError(AppError):
+    def __init__(self, *, detail: str | None = None) -> None:
+        super().__init__("MESSAGE_NOT_FOUND", 404, "Chat message not found", detail)

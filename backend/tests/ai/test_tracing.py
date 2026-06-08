@@ -94,6 +94,36 @@ async def test_success_emits_one_complete_trace_with_round_tripped_trace_id() ->
     assert set(trace.as_attributes().keys()) == _EXPECTED_KEYS  # schema complete
 
 
+async def test_streaming_success_traces_once_on_stream_done() -> None:
+    inner = FakeGateway()
+    inner.queue_stream(["hel", "lo"], prompt_tokens=9, trace_id="trace-stream")
+    tracer = _RecordingTracer()
+    events = [
+        event
+        async for event in TracingGateway(inner=inner, tracer=tracer).complete_stream(
+            prompt=_prompt(), ctx=_ctx()
+        )
+    ]
+
+    assert "".join(getattr(e, "text", "") for e in events) == "hello"  # tokens passed through
+    assert len(tracer.traces) == 1  # exactly one trace, on the terminal StreamDone
+    trace = tracer.traces[0]
+    assert trace.error is None and trace.trace_id == "trace-stream"
+
+
+async def test_streaming_failure_traces_once_and_propagates() -> None:
+    inner = FakeGateway()
+    inner.queue_stream([], error=UpstreamUnavailableError())
+    tracer = _RecordingTracer()
+    with pytest.raises(UpstreamUnavailableError):
+        async for _ in TracingGateway(inner=inner, tracer=tracer).complete_stream(
+            prompt=_prompt(), ctx=_ctx()
+        ):
+            pass
+    assert len(tracer.traces) == 1
+    assert tracer.traces[0].error == "UpstreamUnavailableError"
+
+
 @pytest.mark.parametrize(
     "error",
     [UpstreamUnavailableError(), UpstreamRejectedError(), BudgetExceededError()],

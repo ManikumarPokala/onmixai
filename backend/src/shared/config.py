@@ -169,6 +169,9 @@ class Settings(BaseSettings):
     # wasn't provided) before the whole answer is refused as ungrounded. 0.5 = refuse
     # once fabricated markers reach parity with real ones (ADR 0014). Tunable.
     chat_max_phantom_fraction: float = 0.5
+    chat_session_page_size: int = 50  # hard server-side cap on a session-list page
+    chat_message_page_size: int = 100  # hard server-side cap on a message-history page
+    chat_stream_heartbeat_seconds: float = 15.0  # SSE keep-alive cadence (Task 6)
 
     @field_validator("jwt_secret")
     @classmethod

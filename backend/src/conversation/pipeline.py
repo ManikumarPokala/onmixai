@@ -12,13 +12,22 @@ outage, budget block) is NOT a content refusal: it propagates as an AppError so 
 layer emits an `error` event, persists no assistant row, and leaves the turn re-askable.
 """
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
 import structlog
 
-from src.ai.gateway import GatewayContext, LLMGateway
+from src.ai.gateway import (
+    Completion,
+    GatewayContext,
+    LLMGateway,
+    RenderedPrompt,
+    StreamDone,
+    TextDelta,
+    UpstreamUnavailableError,
+)
 from src.ai.guardrails import InjectionFilter, Refusal
 from src.ai.models import UsageFeature
 from src.ai.prompt_registry import PromptRegistry
@@ -57,7 +66,26 @@ class AnsweredTurn:
     source_chunk_ids: tuple[UUID, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class TokenChunk:
+    """A streamed token delta on the way to a terminal outcome (ADR 0014)."""
+
+    text: str
+
+
 PipelineOutcome = AnsweredTurn | Refusal
+# A streaming run yields zero or more TokenChunks then exactly one terminal outcome.
+PipelineStreamEvent = TokenChunk | AnsweredTurn | Refusal
+
+
+@dataclass(frozen=True, slots=True)
+class _Prepared:
+    """Everything the generation step needs, after rewrite → retrieve → confidence →
+    assemble succeeded. Shared by the streaming and non-streaming paths."""
+
+    prompt: RenderedPrompt
+    ctx: GatewayContext
+    kept: tuple[SearchResultItem, ...]
 
 
 class GroundedAnswerPipeline:
@@ -85,9 +113,74 @@ class GroundedAnswerPipeline:
         summary: str | None,
         request_id: str,
     ) -> PipelineOutcome:
-        """Run the pipeline. Time: 1 rewrite (skipped on first turn) + 1 retrieval +
-        1 generation, each bounded by its own budget. Returns a content outcome
-        (AnsweredTurn | Refusal); raises AppError on a gateway/infrastructure failure."""
+        """Run the pipeline (non-streaming). Time: 1 rewrite (skipped on first turn) +
+        1 retrieval + 1 generation, each bounded by its own budget. Returns a content
+        outcome (AnsweredTurn | Refusal); raises AppError on a gateway/infrastructure
+        failure. ``answer_stream`` is the streaming twin sharing the same prep/finalize."""
+        prepared = await self._prepare(
+            actor=actor,
+            raw_query=raw_query,
+            history=history,
+            summary=summary,
+            request_id=request_id,
+        )
+        if isinstance(prepared, Refusal):
+            return prepared  # low-confidence — BEFORE generation, no spend
+        # A gateway AppError (provider outage, budget block) is an INFRASTRUCTURE failure,
+        # not a content decision — it propagates to the caller (the SSE layer emits an
+        # `error` event, persists no assistant row, and the turn is re-askable). Only
+        # content outcomes (insufficient sources, ungrounded) are Refusal results.
+        completion = await self._gateway.complete(prompt=prepared.prompt, ctx=prepared.ctx)
+        return self._finalize(prepared, completion.text, completion)
+
+    async def answer_stream(
+        self,
+        *,
+        actor: AuthContext,
+        raw_query: str,
+        history: list[HistoryTurn],
+        summary: str | None,
+        request_id: str,
+    ) -> AsyncIterator[PipelineStreamEvent]:
+        """Stream the pipeline (ADR 0014): tokens are yielded live as ``TokenChunk``;
+        when generation completes, grounding validation runs on the ASSEMBLED text and a
+        single terminal ``AnsweredTurn`` or ``Refusal`` is yielded last. A low-confidence
+        refusal yields no tokens at all. A gateway AppError propagates (the SSE layer emits
+        an ``error`` event); validation cannot run on a prefix, so it is necessarily
+        terminal. Time/Space: as ``answer`` (streaming adds no extra passes)."""
+        prepared = await self._prepare(
+            actor=actor,
+            raw_query=raw_query,
+            history=history,
+            summary=summary,
+            request_id=request_id,
+        )
+        if isinstance(prepared, Refusal):
+            yield prepared  # meta → refusal — no tokens, no spend
+            return
+        parts: list[str] = []
+        completion: Completion | None = None
+        async for event in self._gateway.complete_stream(prompt=prepared.prompt, ctx=prepared.ctx):
+            if isinstance(event, TextDelta):
+                parts.append(event.text)
+                yield TokenChunk(event.text)
+            elif isinstance(event, StreamDone):
+                completion = event.completion
+        if completion is None:  # defensive: the stream contract guarantees a StreamDone
+            raise UpstreamUnavailableError(detail="stream ended without a terminal event")
+        yield self._finalize(prepared, "".join(parts), completion)
+
+    async def _prepare(
+        self,
+        *,
+        actor: AuthContext,
+        raw_query: str,
+        history: list[HistoryTurn],
+        summary: str | None,
+        request_id: str,
+    ) -> _Prepared | Refusal:
+        """rewrite → retrieve → confidence → assemble → render. Returns a ready-to-generate
+        bundle, or a low-confidence Refusal that fires BEFORE any generation spend."""
         s = self._settings
         rewritten = await rewrite_query(
             history,
@@ -138,16 +231,16 @@ class GroundedAnswerPipeline:
             request_id=request_id,
             source_chunk_ids=tuple(item.chunk_id for item in kept),
         )
-        # A gateway AppError (provider outage, budget block) is an INFRASTRUCTURE failure,
-        # not a content decision — it propagates to the caller (the SSE layer emits an
-        # `error` event, persists no assistant row, and the turn is re-askable). Only
-        # content outcomes (insufficient sources, ungrounded) are Refusal results.
-        completion = await self._gateway.complete(prompt=prompt, ctx=ctx)
+        return _Prepared(prompt=prompt, ctx=ctx, kept=tuple(kept))
 
+    def _finalize(self, prepared: _Prepared, text: str, completion: Completion) -> PipelineOutcome:
+        """Validate grounding on the COMPLETE answer and resolve citations, or refuse.
+        Shared terminal step for both the streaming and non-streaming paths."""
+        kept = prepared.kept
         grounding = validate_grounding(
-            completion.text,
+            text,
             num_sources=len(kept),
-            max_phantom_fraction=s.chat_max_phantom_fraction,
+            max_phantom_fraction=self._settings.chat_max_phantom_fraction,
         )
         _logger.info(
             "conversation.grounding",
@@ -165,7 +258,7 @@ class GroundedAnswerPipeline:
             content=grounding.text,
             citations=citations,
             model_used=completion.model_used,
-            prompt_version=prompt.template_version,
+            prompt_version=prepared.prompt.template_version,
             trace_id=completion.trace_id,
             source_chunk_ids=tuple(item.chunk_id for item in kept),
         )

@@ -9,7 +9,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from src.conversation.models import ChatRole, FeedbackRating
+from src.conversation.models import (
+    ChatMessage,
+    ChatRole,
+    ChatSession,
+    FeedbackRating,
+    MessageFeedback,
+)
 
 # --- requests ---
 
@@ -43,6 +49,17 @@ class SessionResponse(BaseModel):
     updated_at: datetime
     last_message_at: datetime
 
+    @classmethod
+    def from_model(cls, session: ChatSession) -> "SessionResponse":
+        return cls(
+            id=session.id,
+            title=session.title,
+            is_archived=session.is_archived,
+            created_at=session.created_at,
+            updated_at=session.updated_at,
+            last_message_at=session.last_message_at,
+        )
+
 
 class SessionPage(BaseModel):
     sessions: list[SessionResponse]
@@ -75,6 +92,27 @@ class MessageResponse(BaseModel):
     model_used: str | None
     created_at: datetime
     feedback: FeedbackState | None = None
+
+    @classmethod
+    def from_model(
+        cls, message: ChatMessage, feedback: MessageFeedback | None
+    ) -> "MessageResponse":
+        return cls(
+            id=message.id,
+            seq=message.seq,
+            role=message.role,
+            content=message.content,
+            citations=[Citation(**c) for c in message.citations],
+            refusal_reason=message.refusal_reason,
+            prompt_version=message.prompt_version,
+            model_used=message.model_used,
+            created_at=message.created_at,
+            feedback=(
+                FeedbackState(rating=feedback.rating, comment=feedback.comment)
+                if feedback is not None
+                else None
+            ),
+        )
 
 
 class MessagePage(BaseModel):
@@ -118,3 +156,9 @@ class RefusalEvent(BaseModel):
 class ErrorEvent(BaseModel):
     event: Literal["error"] = "error"
     code: str  # typed envelope code only — never internals
+
+
+# What the service yields while streaming a turn (ADR 0014). ``ErrorEvent`` is NOT here:
+# an infrastructure failure propagates as an exception and the router frames it as the
+# terminal `error` event — the service never fabricates one.
+ConversationStreamEvent = MetaEvent | TokenEvent | CitationsEvent | DoneEvent | RefusalEvent

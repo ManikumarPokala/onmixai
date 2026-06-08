@@ -5,17 +5,25 @@ per-feature attribution; trace_id round-trips into the usage event."""
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.gateway import (
+    BudgetExceededError,
     ChatMessage,
     GatewayContext,
     RenderedPrompt,
     UpstreamUnavailableError,
 )
 from src.ai.metering import MeteringGateway
-from src.ai.models import TokenUsageEvent, TokenUsagePeriod, UsageFeature
+from src.ai.models import (
+    BudgetPeriod,
+    TokenBudget,
+    TokenUsageEvent,
+    TokenUsagePeriod,
+    UsageFeature,
+)
 from src.ai.repository import TokenBudgetRepository, TokenUsageRepository
 from src.identity.service import AuthService
 from src.shared.audit import AuditEmitter
@@ -99,6 +107,47 @@ async def test_failed_call_meters_nothing(
     events = (await db_session.execute(select(func.count(TokenUsageEvent.id)))).scalar_one()
     periods = (await db_session.execute(select(func.count(TokenUsagePeriod.id)))).scalar_one()
     assert events == 0 and periods == 0  # a failed provider call is never metered
+
+
+async def test_streaming_meters_exactly_on_stream_done(
+    auth_service: AuthService, db_session: AsyncSession
+) -> None:
+    org_id, user_id = await _org(auth_service)
+    await set_tenant_context(db_session, org_id)
+    fake = FakeGateway()
+    fake.queue_stream(["one ", "two ", "three"], prompt_tokens=40)  # 3 completion tokens
+    gateway = _gateway(db_session, fake)
+    events = [
+        event
+        async for event in gateway.complete_stream(prompt=_prompt(), ctx=_ctx(org_id, user_id))
+    ]
+
+    assert "".join(getattr(e, "text", "") for e in events) == "one two three"
+    period_total = (
+        await db_session.execute(
+            select(TokenUsagePeriod.total_tokens).where(TokenUsagePeriod.period_start == _PERIOD)
+        )
+    ).scalar_one()
+    assert period_total == 43  # 40 prompt + 3 completion, recorded once on StreamDone
+
+
+async def test_streaming_over_budget_blocks_before_any_token(
+    auth_service: AuthService, db_session: AsyncSession
+) -> None:
+    org_id, user_id = await _org(auth_service)
+    await set_tenant_context(db_session, org_id)
+    db_session.add(TokenBudget(org_id=org_id, period=BudgetPeriod.MONTHLY, limit_tokens=10))
+    await db_session.flush()
+    fake = FakeGateway()
+    fake.queue_stream(["should ", "not ", "stream"])
+    gateway = _gateway(db_session, fake)
+    # Push the period to the limit so the next stream is blocked before generating.
+    await TokenUsageRepository(db_session).increment_period(org_id, _PERIOD, 10)
+
+    with pytest.raises(BudgetExceededError):
+        async for _ in gateway.complete_stream(prompt=_prompt(), ctx=_ctx(org_id, user_id)):
+            pass
+    assert fake.stream_calls == []  # the inner stream was never started — zero spend
 
 
 async def test_per_feature_attribution_and_trace_round_trip(

@@ -6,7 +6,7 @@ hangs (CLAUDE.md §3.6, patterns.md §9/§10).
 """
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from random import Random
 from typing import Any, Protocol
 from uuid import UUID, uuid4
@@ -20,6 +20,9 @@ from src.ai.gateway import (
     GatewayContext,
     ModelRef,
     RenderedPrompt,
+    StreamDone,
+    StreamEvent,
+    TextDelta,
     UpstreamRejectedError,
     UpstreamUnavailableError,
 )
@@ -128,6 +131,65 @@ class LiteLLMGateway:
             return completion
         raise UpstreamUnavailableError(
             detail=last_detail or "all providers unavailable or circuit-open"
+        )
+
+    async def complete_stream(
+        self,
+        *,
+        prompt: RenderedPrompt,
+        ctx: GatewayContext,
+        model: ModelRef | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream the first circuit-allowed model's completion. Streaming does NOT retry
+        or fall back mid-stream (an error after the first token propagates); the breaker
+        still gates the initial attempt and records the outcome. Non-streaming complete()
+        keeps the full retry/fallback chain. Token counts are estimated (the dev stub does
+        not emit streamed usage)."""
+        chain, temperature = await self._resolve(ctx.org_id, model)
+        trace_id = uuid4().hex
+        model_name = next((name for name in chain if self._breaker.allow(name)), None)
+        if model_name is None:
+            raise UpstreamUnavailableError(detail="all providers circuit-open")
+
+        kwargs: dict[str, Any] = {
+            "model": model_name,
+            "messages": [{"role": m.role, "content": m.content} for m in prompt.messages],
+            "temperature": temperature,
+            "timeout": self._settings.llm_timeout_seconds,
+            "num_retries": 0,
+            "stream": True,
+        }
+        if self._settings.llm_base_url:
+            kwargs["api_base"] = self._settings.llm_base_url
+        if self._settings.llm_api_key:
+            kwargs["api_key"] = self._settings.llm_api_key.get_secret_value()
+
+        parts: list[str] = []
+        try:
+            response = await self._acompletion(**kwargs)
+            async for chunk in response:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    parts.append(delta)
+                    yield TextDelta(delta)
+        except _REJECTED as exc:
+            self._breaker.record_failure(model_name)
+            raise UpstreamRejectedError(detail=str(exc)) from exc
+        except (*_RETRYABLE, litellm.APIError) as exc:
+            self._breaker.record_failure(model_name)
+            raise UpstreamUnavailableError(detail=str(exc)) from exc
+
+        self._breaker.record_success(model_name)
+        text = "".join(parts)
+        yield StreamDone(
+            Completion(
+                text=text,
+                model_used=model_name,
+                prompt_tokens=sum(len(m.content.split()) for m in prompt.messages),
+                completion_tokens=max(1, len(text.split())),
+                finish_reason="stop",
+                trace_id=trace_id,
+            )
         )
 
     async def _resolve(self, org_id: UUID, model: ModelRef | None) -> tuple[list[str], float]:
