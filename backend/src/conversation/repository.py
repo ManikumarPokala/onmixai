@@ -4,17 +4,20 @@ decisions here (CLAUDE.md §3.1). Every list is bounded by a caller-supplied ``l
 there is no unbounded SELECT."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import delete, func, literal, select, tuple_, update
+from sqlalchemy import CursorResult, delete, func, literal, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.conversation.models import (
     ChatMessage,
+    ChatRole,
     ChatSession,
     FeedbackRating,
+    GoldenCandidate,
+    GoldenCandidateStatus,
     MessageFeedback,
     SessionSummary,
 )
@@ -256,3 +259,103 @@ class SessionSummaryRepository:
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none() is not None
+
+
+class GoldenCandidateRepository:
+    """Golden-candidate persistence + the curation reads over feedback/messages. Tenant-scoped by
+    RLS; the decision is a compare-and-set so two curators can never both decide one candidate."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_positive_feedback(
+        self, org_id: UUID, *, before: tuple[datetime, UUID] | None, limit: int
+    ) -> list[MessageFeedback]:
+        """One newest-first page of UP-rated feedback in the org (across users) — the review
+        queue. Keyset on (created_at, id). Time: O(limit)."""
+        stmt = select(MessageFeedback).where(
+            MessageFeedback.org_id == org_id, MessageFeedback.rating == FeedbackRating.UP
+        )
+        if before is not None:
+            stmt = stmt.where(
+                tuple_(MessageFeedback.created_at, MessageFeedback.id)
+                < tuple_(literal(before[0]), literal(before[1]))
+            )
+        stmt = stmt.order_by(MessageFeedback.created_at.desc(), MessageFeedback.id.desc()).limit(
+            limit
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def preceding_user_message(
+        self, org_id: UUID, session_id: UUID, before_seq: int
+    ) -> ChatMessage | None:
+        """The user turn that prompted an assistant message: the highest-seq USER message before
+        ``before_seq`` in the session. Time: O(log n) on the (session, seq) index."""
+        stmt = (
+            select(ChatMessage)
+            .where(
+                ChatMessage.org_id == org_id,
+                ChatMessage.session_id == session_id,
+                ChatMessage.role == ChatRole.USER,
+                ChatMessage.seq < before_seq,
+            )
+            .order_by(ChatMessage.seq.desc())
+            .limit(1)
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def create(self, candidate: GoldenCandidate) -> GoldenCandidate:
+        self._session.add(candidate)
+        await self._session.flush()
+        return candidate
+
+    async def get(self, org_id: UUID, candidate_id: UUID) -> GoldenCandidate | None:
+        stmt = select(GoldenCandidate).where(
+            GoldenCandidate.org_id == org_id, GoldenCandidate.id == candidate_id
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def list_for_org(
+        self,
+        org_id: UUID,
+        status: GoldenCandidateStatus | None,
+        *,
+        before: tuple[datetime, UUID] | None,
+        limit: int,
+    ) -> list[GoldenCandidate]:
+        """One newest-first page of candidates, optionally filtered by status. Time: O(limit)."""
+        stmt = select(GoldenCandidate).where(GoldenCandidate.org_id == org_id)
+        if status is not None:
+            stmt = stmt.where(GoldenCandidate.status == status)
+        if before is not None:
+            stmt = stmt.where(
+                tuple_(GoldenCandidate.created_at, GoldenCandidate.id)
+                < tuple_(literal(before[0]), literal(before[1]))
+            )
+        stmt = stmt.order_by(GoldenCandidate.created_at.desc(), GoldenCandidate.id.desc()).limit(
+            limit
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def decide(
+        self,
+        org_id: UUID,
+        candidate_id: UUID,
+        target: GoldenCandidateStatus,
+        *,
+        decided_by: UUID,
+        now: datetime,
+    ) -> bool:
+        """Compare-and-set pending → target. Returns True iff this call made the decision (so two
+        curators racing can never both decide). Time: O(1)."""
+        stmt = (
+            update(GoldenCandidate)
+            .where(
+                GoldenCandidate.org_id == org_id,
+                GoldenCandidate.id == candidate_id,
+                GoldenCandidate.status == GoldenCandidateStatus.PENDING,
+            )
+            .values(status=target, decided_by=decided_by, decided_at=now)
+        )
+        result = cast("CursorResult[Any]", await self._session.execute(stmt))
+        return result.rowcount == 1

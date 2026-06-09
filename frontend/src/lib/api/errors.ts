@@ -49,6 +49,8 @@ export const ERROR_CODES = [
   'MESSAGE_EMPTY',
   'MESSAGE_NOT_FOUND',
   'INVALID_CURSOR',
+  'GOLDEN_CANDIDATE_NOT_FOUND',
+  'GOLDEN_CANDIDATE_ALREADY_DECIDED',
   // recommendation / reports
   'RECOMMENDATION_NOT_FOUND',
   'REPORT_NOT_FOUND',
@@ -96,6 +98,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   MESSAGE_EMPTY: 'Please type a message before sending.',
   MESSAGE_NOT_FOUND: 'That message could not be found.',
   INVALID_CURSOR: 'The page could not be loaded. Please refresh.',
+  GOLDEN_CANDIDATE_NOT_FOUND: 'That golden candidate could not be found.',
+  GOLDEN_CANDIDATE_ALREADY_DECIDED: 'That candidate has already been approved or rejected.',
   RECOMMENDATION_NOT_FOUND: 'That recommendation could not be found.',
   REPORT_NOT_FOUND: 'That report could not be found.',
   EXPORT_NOT_FOUND: 'That export could not be found.',

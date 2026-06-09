@@ -39,3 +39,15 @@ class InvalidCursorError(AppError):
 class MessageNotFoundError(AppError):
     def __init__(self, *, detail: str | None = None) -> None:
         super().__init__("MESSAGE_NOT_FOUND", 404, "Chat message not found", detail)
+
+
+class GoldenCandidateNotFoundError(AppError):
+    def __init__(self, *, detail: str | None = None) -> None:
+        super().__init__("GOLDEN_CANDIDATE_NOT_FOUND", 404, "Golden candidate not found", detail)
+
+
+class GoldenCandidateAlreadyDecidedError(AppError):
+    def __init__(self, *, detail: str | None = None) -> None:
+        super().__init__(
+            "GOLDEN_CANDIDATE_ALREADY_DECIDED", 409, "Golden candidate already decided", detail
+        )

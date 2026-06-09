@@ -456,6 +456,23 @@
         "title": "CreateSessionRequest",
         "type": "object"
       },
+      "DecisionRequest": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "DecisionRequest",
+        "type": "object"
+      },
       "DocumentPage": {
         "description": "One keyset page of the org's documents across all collections (admin view).",
         "properties": {
@@ -700,6 +717,117 @@
         ],
         "title": "FeedbackState",
         "type": "object"
+      },
+      "GoldenCandidatePage": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/GoldenCandidateResponse"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "candidates",
+          "next_cursor"
+        ],
+        "title": "GoldenCandidatePage",
+        "type": "object"
+      },
+      "GoldenCandidateResponse": {
+        "description": "A curated, PII-redacted golden candidate. Approval here never writes the eval golden set.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "rating": {
+            "$ref": "#/components/schemas/FeedbackRating"
+          },
+          "redaction_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Redaction Counts",
+            "type": "object"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GoldenCandidateStatus"
+          }
+        },
+        "required": [
+          "id",
+          "source_message_id",
+          "question",
+          "answer",
+          "rating",
+          "status",
+          "redaction_counts",
+          "created_at",
+          "decided_at"
+        ],
+        "title": "GoldenCandidateResponse",
+        "type": "object"
+      },
+      "GoldenCandidateStatus": {
+        "description": "Lifecycle of a feedback-derived golden-set candidate. Terminal once decided; promotion to\nthe actual eval golden set is a separate, human, out-of-band step (never auto-merged).",
+        "enum": [
+          "pending",
+          "approved",
+          "rejected"
+        ],
+        "title": "GoldenCandidateStatus",
+        "type": "string"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1459,6 +1587,85 @@
           "conversation_retention_days"
         ],
         "title": "RetentionPolicyResponse",
+        "type": "object"
+      },
+      "ReviewItem": {
+        "description": "One UP-rated Q&A surfaced for golden curation. Content is PII-REDACTED before it reaches a\nreviewer; only redaction counts (never the matched values) accompany it.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "redaction_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Redaction Counts",
+            "type": "object"
+          }
+        },
+        "required": [
+          "message_id",
+          "question",
+          "answer",
+          "comment",
+          "redaction_counts",
+          "created_at"
+        ],
+        "title": "ReviewItem",
+        "type": "object"
+      },
+      "ReviewPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ReviewPage",
         "type": "object"
       },
       "Role": {
@@ -2456,6 +2663,262 @@
           }
         ],
         "summary": "List Audit Events",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/feedback/review": {
+      "get": {
+        "description": "One page of UP-rated answers, surfaced PII-redacted for golden curation (owner/admin).",
+        "operationId": "review_feedback_api_v1_admin_feedback_review_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Review Feedback",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/feedback/{message_id}/promote": {
+      "post": {
+        "description": "Promote an answer's Q&A into a PENDING golden candidate, stored PII-redacted (audited).",
+        "operationId": "promote_to_golden_candidate_api_v1_admin_feedback__message_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoldenCandidateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Promote To Golden Candidate",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/golden-candidates": {
+      "get": {
+        "description": "One page of golden candidates, optionally filtered by status (owner/admin).",
+        "operationId": "list_golden_candidates_api_v1_admin_golden_candidates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/GoldenCandidateStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoldenCandidatePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Golden Candidates",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/golden-candidates/{candidate_id}/decision": {
+      "post": {
+        "description": "Human gate: approve or reject a candidate (audited). Never writes the eval golden set.",
+        "operationId": "decide_golden_candidate_api_v1_admin_golden_candidates__candidate_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoldenCandidateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decide Golden Candidate",
         "tags": [
           "admin"
         ]

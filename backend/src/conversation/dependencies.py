@@ -7,6 +7,8 @@ shares. The per-user rate-limit key is set here (it needs the authenticated acto
 read by the shared limiter's key func — so ``shared`` never imports a domain.
 """
 
+from typing import TYPE_CHECKING
+
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +30,9 @@ from src.search.service import SearchService
 from src.shared.audit import AuditEmitter, get_audit_emitter
 from src.shared.config import Settings, get_settings
 from src.shared.database import get_db_session
+
+if TYPE_CHECKING:
+    from src.conversation.curation_service import FeedbackCurationService
 
 
 def get_chat_service(
@@ -61,3 +66,22 @@ async def set_user_scoped_key(
     """Dependency: key the chat rate limit on the authenticated user (not IP), so the
     30/min cap is per-account. The shared limiter reads ``request.state.rate_limit_key``."""
     request.state.rate_limit_key = f"chat:{actor.user_id}"
+
+
+def get_feedback_curation_service(
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditEmitter = Depends(get_audit_emitter),
+    settings: Settings = Depends(get_settings),
+) -> "FeedbackCurationService":
+    """Owner/admin feedback→golden curation, bound to the request session + audit emitter."""
+    from src.ai.guardrails.pii import PIIRedactor
+    from src.conversation.curation_service import FeedbackCurationService
+    from src.conversation.repository import ChatMessageRepository, GoldenCandidateRepository
+
+    return FeedbackCurationService(
+        candidates=GoldenCandidateRepository(session),
+        messages=ChatMessageRepository(session),
+        redactor=PIIRedactor(),
+        audit=audit,
+        settings=settings,
+    )

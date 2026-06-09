@@ -14,6 +14,8 @@ from src.conversation.models import (
     ChatRole,
     ChatSession,
     FeedbackRating,
+    GoldenCandidate,
+    GoldenCandidateStatus,
     MessageFeedback,
 )
 
@@ -162,3 +164,57 @@ class ErrorEvent(BaseModel):
 # an infrastructure failure propagates as an exception and the router frames it as the
 # terminal `error` event — the service never fabricates one.
 ConversationStreamEvent = MetaEvent | TokenEvent | CitationsEvent | DoneEvent | RefusalEvent
+
+
+class ReviewItem(BaseModel):
+    """One UP-rated Q&A surfaced for golden curation. Content is PII-REDACTED before it reaches a
+    reviewer; only redaction counts (never the matched values) accompany it."""
+
+    message_id: UUID
+    question: str
+    answer: str
+    comment: str | None
+    redaction_counts: dict[str, int]
+    created_at: datetime
+
+
+class ReviewPage(BaseModel):
+    items: list[ReviewItem]
+    next_cursor: str | None
+
+
+class GoldenCandidateResponse(BaseModel):
+    """A curated, PII-redacted golden candidate. Approval here never writes the eval golden set."""
+
+    id: UUID
+    source_message_id: UUID | None
+    question: str
+    answer: str
+    rating: FeedbackRating
+    status: GoldenCandidateStatus
+    redaction_counts: dict[str, int]
+    created_at: datetime
+    decided_at: datetime | None
+
+    @classmethod
+    def from_model(cls, c: "GoldenCandidate") -> "GoldenCandidateResponse":
+        return cls(
+            id=c.id,
+            source_message_id=c.source_message_id,
+            question=c.question,
+            answer=c.answer,
+            rating=c.rating,
+            status=c.status,
+            redaction_counts=dict(c.redaction_counts),
+            created_at=c.created_at,
+            decided_at=c.decided_at,
+        )
+
+
+class GoldenCandidatePage(BaseModel):
+    candidates: list[GoldenCandidateResponse]
+    next_cursor: str | None
+
+
+class DecisionRequest(BaseModel):
+    decision: Literal["approve", "reject"]

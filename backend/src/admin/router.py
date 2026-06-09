@@ -16,6 +16,15 @@ from src.ai.config_schemas import (
 )
 from src.ai.config_service import AIConfigService
 from src.ai.dependencies import get_ai_config_service
+from src.conversation.curation_service import FeedbackCurationService
+from src.conversation.dependencies import get_feedback_curation_service
+from src.conversation.models import GoldenCandidateStatus
+from src.conversation.schemas import (
+    DecisionRequest,
+    GoldenCandidatePage,
+    GoldenCandidateResponse,
+    ReviewPage,
+)
 from src.governance.analytics import AnalyticsService
 from src.governance.dependencies import (
     get_analytics_service,
@@ -232,3 +241,47 @@ async def set_budget(
 ) -> BudgetResponse:
     """Set the org's monthly token budget (audited). Effective on the next metered call."""
     return await service.set_budget(org_id=actor.org_id, actor_id=actor.user_id, body=body)
+
+
+@router.get("/feedback/review", response_model=ReviewPage)
+async def review_feedback(
+    actor: AuthContext = Depends(require_admin),
+    service: FeedbackCurationService = Depends(get_feedback_curation_service),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1),
+) -> ReviewPage:
+    """One page of UP-rated answers, surfaced PII-redacted for golden curation (owner/admin)."""
+    return await service.list_review_queue(actor, cursor=cursor, limit=limit)
+
+
+@router.post("/feedback/{message_id}/promote", response_model=GoldenCandidateResponse)
+async def promote_to_golden_candidate(
+    message_id: UUID,
+    actor: AuthContext = Depends(require_admin),
+    service: FeedbackCurationService = Depends(get_feedback_curation_service),
+) -> GoldenCandidateResponse:
+    """Promote an answer's Q&A into a PENDING golden candidate, stored PII-redacted (audited)."""
+    return await service.promote(actor, message_id)
+
+
+@router.get("/golden-candidates", response_model=GoldenCandidatePage)
+async def list_golden_candidates(
+    actor: AuthContext = Depends(require_admin),
+    service: FeedbackCurationService = Depends(get_feedback_curation_service),
+    status: GoldenCandidateStatus | None = Query(default=None),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1),
+) -> GoldenCandidatePage:
+    """One page of golden candidates, optionally filtered by status (owner/admin)."""
+    return await service.list_candidates(actor, status=status, cursor=cursor, limit=limit)
+
+
+@router.post("/golden-candidates/{candidate_id}/decision", response_model=GoldenCandidateResponse)
+async def decide_golden_candidate(
+    candidate_id: UUID,
+    body: DecisionRequest,
+    actor: AuthContext = Depends(require_admin),
+    service: FeedbackCurationService = Depends(get_feedback_curation_service),
+) -> GoldenCandidateResponse:
+    """Human gate: approve or reject a candidate (audited). Never writes the eval golden set."""
+    return await service.decide(actor, candidate_id, approve=body.decision == "approve")

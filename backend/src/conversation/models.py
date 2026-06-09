@@ -149,3 +149,59 @@ class SessionSummary(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+GOLDEN_CANDIDATE_STATUS_ENUM_NAME = "golden_candidate_status"
+
+
+class GoldenCandidateStatus(StrEnum):
+    """Lifecycle of a feedback-derived golden-set candidate. Terminal once decided; promotion to
+    the actual eval golden set is a separate, human, out-of-band step (never auto-merged)."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+def _golden_candidate_status() -> Enum:
+    return Enum(
+        GoldenCandidateStatus,
+        name=GOLDEN_CANDIDATE_STATUS_ENUM_NAME,
+        values_callable=lambda e: [m.value for m in e],
+    )
+
+
+class GoldenCandidate(Base):
+    """A reviewed Q&A pair, derived from positive message feedback, proposed for the golden eval
+    set. Question/answer are stored ALREADY PII-redacted (raw PII never lands here); only redaction
+    counts are kept for transparency. A human curator gates pending → approved/rejected; approval
+    does not write the eval golden files (no auto-merge — export is a deliberate manual step)."""
+
+    __tablename__ = "golden_candidates"
+    __table_args__ = (
+        Index("ix_golden_candidates_org_status", "org_id", "status"),
+        Index("ix_golden_candidates_org_created", "org_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    org_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"))
+    # The assistant message this Q&A came from; kept for provenance, nullable so a candidate
+    # outlives the message it was curated from (SET NULL, not CASCADE).
+    source_message_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True
+    )
+    question: Mapped[str] = mapped_column(Text)  # PII-redacted
+    answer: Mapped[str] = mapped_column(Text)  # PII-redacted
+    rating: Mapped[FeedbackRating] = mapped_column(_feedback_rating())
+    redaction_counts: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, server_default=text("'{}'::jsonb")
+    )
+    status: Mapped[GoldenCandidateStatus] = mapped_column(
+        _golden_candidate_status(), server_default=GoldenCandidateStatus.PENDING.value
+    )
+    curated_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    decided_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -6,7 +6,11 @@ here)."""
 import base64
 import binascii
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from src.conversation.models import GoldenCandidateStatus
 
 from src.conversation.exceptions import (
     EmptyMessageError,
@@ -85,3 +89,11 @@ def decode_session_cursor(cursor: str) -> tuple[datetime, UUID]:
         return datetime.fromisoformat(ts_str), UUID(id_str)
     except (binascii.Error, ValueError, UnicodeDecodeError) as exc:
         raise InvalidCursorError(detail="could not decode session cursor") from exc
+
+
+def candidate_decision_target(approve: bool) -> "GoldenCandidateStatus":
+    """The terminal status a human decision maps to. A candidate is only ever decided FROM
+    pending (enforced atomically by the repository's compare-and-set). Time: O(1)."""
+    from src.conversation.models import GoldenCandidateStatus
+
+    return GoldenCandidateStatus.APPROVED if approve else GoldenCandidateStatus.REJECTED

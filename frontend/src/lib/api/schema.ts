@@ -88,6 +88,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/feedback/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Review Feedback
+         * @description One page of UP-rated answers, surfaced PII-redacted for golden curation (owner/admin).
+         */
+        get: operations["review_feedback_api_v1_admin_feedback_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/feedback/{message_id}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Promote To Golden Candidate
+         * @description Promote an answer's Q&A into a PENDING golden candidate, stored PII-redacted (audited).
+         */
+        post: operations["promote_to_golden_candidate_api_v1_admin_feedback__message_id__promote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/golden-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Golden Candidates
+         * @description One page of golden candidates, optionally filtered by status (owner/admin).
+         */
+        get: operations["list_golden_candidates_api_v1_admin_golden_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/golden-candidates/{candidate_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Golden Candidate
+         * @description Human gate: approve or reject a candidate (audited). Never writes the eval golden set.
+         */
+        post: operations["decide_golden_candidate_api_v1_admin_golden_candidates__candidate_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/knowledge/documents": {
         parameters: {
             query?: never;
@@ -957,6 +1037,14 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /** DecisionRequest */
+        DecisionRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+        };
         /**
          * DocumentPage
          * @description One keyset page of the org's documents across all collections (admin view).
@@ -1058,6 +1146,50 @@ export interface components {
             comment?: string | null;
             rating: components["schemas"]["FeedbackRating"] | null;
         };
+        /** GoldenCandidatePage */
+        GoldenCandidatePage: {
+            /** Candidates */
+            candidates: components["schemas"]["GoldenCandidateResponse"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * GoldenCandidateResponse
+         * @description A curated, PII-redacted golden candidate. Approval here never writes the eval golden set.
+         */
+        GoldenCandidateResponse: {
+            /** Answer */
+            answer: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Question */
+            question: string;
+            rating: components["schemas"]["FeedbackRating"];
+            /** Redaction Counts */
+            redaction_counts: {
+                [key: string]: number;
+            };
+            /** Source Message Id */
+            source_message_id: string | null;
+            status: components["schemas"]["GoldenCandidateStatus"];
+        };
+        /**
+         * GoldenCandidateStatus
+         * @description Lifecycle of a feedback-derived golden-set candidate. Terminal once decided; promotion to
+         *     the actual eval golden set is a separate, human, out-of-band step (never auto-merged).
+         * @enum {string}
+         */
+        GoldenCandidateStatus: "pending" | "approved" | "rejected";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1355,6 +1487,40 @@ export interface components {
             audit_retention_days: number | null;
             /** Conversation Retention Days */
             conversation_retention_days: number | null;
+        };
+        /**
+         * ReviewItem
+         * @description One UP-rated Q&A surfaced for golden curation. Content is PII-REDACTED before it reaches a
+         *     reviewer; only redaction counts (never the matched values) accompany it.
+         */
+        ReviewItem: {
+            /** Answer */
+            answer: string;
+            /** Comment */
+            comment: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Message Id
+             * Format: uuid
+             */
+            message_id: string;
+            /** Question */
+            question: string;
+            /** Redaction Counts */
+            redaction_counts: {
+                [key: string]: number;
+            };
+        };
+        /** ReviewPage */
+        ReviewPage: {
+            /** Items */
+            items: components["schemas"]["ReviewItem"][];
+            /** Next Cursor */
+            next_cursor: string | null;
         };
         /**
          * Role
@@ -1766,6 +1932,137 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditEventPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_feedback_api_v1_admin_feedback_review_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    promote_to_golden_candidate_api_v1_admin_feedback__message_id__promote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldenCandidateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_golden_candidates_api_v1_admin_golden_candidates_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["GoldenCandidateStatus"] | null;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldenCandidatePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_golden_candidate_api_v1_admin_golden_candidates__candidate_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldenCandidateResponse"];
                 };
             };
             /** @description Validation Error */
