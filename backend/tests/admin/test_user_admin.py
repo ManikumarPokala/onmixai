@@ -33,7 +33,7 @@ async def test_deactivation_invalidates_the_session_immediately(
     member = auth(org.tokens[Role.MEMBER])
     # The member can use a guarded route before deactivation.
     assert (
-        await admin_harness.client.get("/api/v1/chat/sessions", headers=member)
+        await admin_harness.client.get("/api/v1/users/me", headers=member)
     ).status_code == 200
     # Admin deactivates them...
     resp = await admin_harness.client.post(
@@ -42,7 +42,7 @@ async def test_deactivation_invalidates_the_session_immediately(
     assert resp.status_code == 200 and resp.json()["is_active"] is False
     # ...and their next request is rejected (inactive user).
     assert (
-        await admin_harness.client.get("/api/v1/chat/sessions", headers=member)
+        await admin_harness.client.get("/api/v1/users/me", headers=member)
     ).status_code == 401
 
 
