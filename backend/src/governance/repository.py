@@ -174,6 +174,13 @@ class RetentionPurgeRepository:
             raise ValueError(f"table not purgeable: {table}")
         return table
 
+    @staticmethod
+    def _self_exemption(table: str) -> str:
+        """The audit purge must NEVER delete its own deletion-history records (ADR 0019): an
+        ``audit_events`` purge excludes ``retention.*`` events, so the record of what was purged
+        is permanent and a later run can never erase the deletion trail. No-op for other tables."""
+        return " AND action NOT LIKE 'retention.%'" if table == "audit_events" else ""
+
     async def all_org_ids(self) -> list[UUID]:
         """Every org id (the tenant root ``organizations`` is not RLS-scoped, so this needs no
         tenant context — the purge enumerates orgs, then sets context per org). Time: O(orgs)."""
@@ -181,10 +188,14 @@ class RetentionPurgeRepository:
         return [row[0] for row in result.all()]
 
     async def count_expired(self, table: str, org_id: UUID, cutoff: datetime) -> int:
-        """Rows in ``table`` for the org older than ``cutoff``. Time: O(matching) index scan."""
+        """Rows in ``table`` for the org older than ``cutoff`` (excluding the audit purge's own
+        retention records — see _self_exemption). Time: O(matching) index scan."""
         t = self._checked(table)
         result = await self._session.execute(
-            text(f"SELECT count(*) FROM {t} WHERE org_id = :org AND created_at < :cutoff"),
+            text(
+                f"SELECT count(*) FROM {t} WHERE org_id = :org AND created_at < :cutoff"
+                f"{self._self_exemption(t)}"
+            ),
             {"org": str(org_id), "cutoff": cutoff},
         )
         return int(result.scalar_one())
@@ -192,13 +203,14 @@ class RetentionPurgeRepository:
     async def expired_id_batch(
         self, table: str, org_id: UUID, cutoff: datetime, limit: int
     ) -> list[UUID]:
-        """The oldest ``limit`` expired ids (keyset order). Selecting before deleting lets the
-        audit record name exactly what is about to be deleted. Time: O(limit)."""
+        """The oldest ``limit`` expired ids (keyset order), excluding the audit purge's own
+        retention records (ADR 0019 self-exemption). Selecting before deleting lets the audit
+        record name exactly what is about to be deleted. Time: O(limit)."""
         t = self._checked(table)
         result = await self._session.execute(
             text(
-                f"SELECT id FROM {t} WHERE org_id = :org AND created_at < :cutoff "
-                "ORDER BY created_at, id LIMIT :limit"
+                f"SELECT id FROM {t} WHERE org_id = :org AND created_at < :cutoff"
+                f"{self._self_exemption(t)} ORDER BY created_at, id LIMIT :limit"
             ),
             {"org": str(org_id), "cutoff": cutoff, "limit": limit},
         )

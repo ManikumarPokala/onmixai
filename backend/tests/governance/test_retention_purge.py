@@ -343,6 +343,70 @@ async def test_purge_is_org_isolated(
     )
 
 
+async def test_purge_never_deletes_its_own_retention_records(
+    purge_sessionmaker: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    """ADR 0019 self-exemption: a retention.* event is the permanent record of a deletion, so a
+    later audit purge whose cutoff is past that event's age must NOT delete it — otherwise the
+    deletion history would erase itself. Here an OLD retention record (older than the 30-day audit
+    window) survives a purge that deletes the equally-old ordinary event beside it."""
+    org_id, user_id = uuid4(), uuid4()
+    async with purge_sessionmaker() as session:
+        await set_tenant_context(session, org_id)
+        session.add(Organization(id=org_id, name="Org", slug=f"org-{org_id}"))
+        await session.flush()
+        session.add(
+            User(
+                id=user_id,
+                org_id=org_id,
+                email=f"u-{user_id}@x.test",
+                password_hash="x",
+                full_name="U",
+                role=Role.OWNER,
+            )
+        )
+        await session.flush()
+        session.add(RetentionPolicy(org_id=org_id, audit_retention_days=30, updated_by=user_id))
+        # Both rows are 400 days old (well past the 30-day cutoff): one ordinary event, one prior
+        # retention record. The prior record carries no human actor — like the purge writes.
+        session.add(
+            AuditEvent(
+                org_id=org_id,
+                actor_user_id=user_id,
+                action="test.event",
+                event_metadata={},
+                created_at=_OLD,
+            )
+        )
+        session.add(
+            AuditEvent(
+                org_id=org_id,
+                actor_user_id=None,
+                action="retention.audit_purged",
+                event_metadata={"historical": True},
+                created_at=_OLD,
+            )
+        )
+        await session.commit()
+
+    await _service(purge_sessionmaker, settings).purge(now=_NOW, dry_run=False)
+
+    # The ordinary old event is gone; the OLD retention record survived the purge.
+    assert await _seeded_audit_events(purge_sessionmaker, org_id) == 0
+    async with purge_sessionmaker() as session:
+        await set_tenant_context(session, org_id)
+        survived = (
+            await session.execute(
+                text(
+                    "SELECT count(*) FROM audit_events WHERE org_id = :org "
+                    "AND action = 'retention.audit_purged' AND created_at = :old"
+                ),
+                {"org": str(org_id), "old": _OLD},
+            )
+        ).scalar_one()
+    assert survived == 1  # the historical deletion record is permanent
+
+
 async def test_purge_worker_fails_loud_without_a_purge_connection(settings: Settings) -> None:
     # No purge_sessionmaker in ctx → the cron logs an error and does nothing (never silently OK).
     from src.governance.worker import purge_expired_data
