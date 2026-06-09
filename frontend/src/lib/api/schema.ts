@@ -4,6 +4,50 @@
  */
 
 export interface paths {
+    "/api/v1/admin/ai/budget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Budget
+         * @description Set the org's monthly token budget (audited). Effective on the next metered call.
+         */
+        put: operations["set_budget_api_v1_admin_ai_budget_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ai/model-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Model Config
+         * @description The org's LLM routing config — its row, or platform defaults when unset (owner/admin).
+         */
+        get: operations["get_model_config_api_v1_admin_ai_model_config_get"];
+        /**
+         * Set Model Config
+         * @description Replace the org's model config (audited). 422 on a bad model ref or empty fallback chain.
+         */
+        put: operations["set_model_config_api_v1_admin_ai_model_config_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/analytics/usage": {
         parameters: {
             query?: never;
@@ -686,6 +730,23 @@ export interface components {
             /** File */
             file: string;
         };
+        /**
+         * BudgetPeriod
+         * @description The window a token budget applies over.
+         * @enum {string}
+         */
+        BudgetPeriod: "monthly";
+        /**
+         * BudgetResponse
+         * @description The org's budget for a period.
+         */
+        BudgetResponse: {
+            /** Limit Tokens */
+            limit_tokens: number;
+            period: components["schemas"]["BudgetPeriod"];
+            /** Soft Threshold Pct */
+            soft_threshold_pct: number;
+        };
         /** ChangeRoleRequest */
         ChangeRoleRequest: {
             role: components["schemas"]["Role"];
@@ -950,6 +1011,19 @@ export interface components {
             role: components["schemas"]["ChatRole"];
             /** Seq */
             seq: number;
+        };
+        /**
+         * ModelConfigResponse
+         * @description The org's effective model config. When no row exists yet the admin surface returns the
+         *     platform defaults from Settings (``ModelConfig`` row absent → Settings, see models.py).
+         */
+        ModelConfigResponse: {
+            /** Default Model */
+            default_model: string;
+            /** Fallback Chain */
+            fallback_chain: string[];
+            /** Temperature Default */
+            temperature_default: number | null;
         };
         /** OrganizationResponse */
         OrganizationResponse: {
@@ -1237,6 +1311,33 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * SetBudgetRequest
+         * @description Set the org's monthly token budget. ``limit_tokens`` 0 freezes spend (the next metered
+         *     call is blocked); ``soft_threshold_pct`` is the warn-at percentage.
+         */
+        SetBudgetRequest: {
+            /** Limit Tokens */
+            limit_tokens: number;
+            /**
+             * Soft Threshold Pct
+             * @default 80
+             */
+            soft_threshold_pct: number;
+        };
+        /**
+         * SetModelConfigRequest
+         * @description Replace the org's LLM routing config. Validated by ai.rules.ensure_valid_model_config
+         *     (known providers, non-empty fallback chain) before it is written.
+         */
+        SetModelConfigRequest: {
+            /** Default Model */
+            default_model: string;
+            /** Fallback Chain */
+            fallback_chain?: string[];
+            /** Temperature Default */
+            temperature_default?: number | null;
+        };
         /** SourceAttribution */
         SourceAttribution: {
             /**
@@ -1373,6 +1474,92 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    set_budget_api_v1_admin_ai_budget_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetBudgetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_model_config_api_v1_admin_ai_model_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelConfigResponse"];
+                };
+            };
+        };
+    };
+    set_model_config_api_v1_admin_ai_model_config_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetModelConfigRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     usage_analytics_api_v1_admin_analytics_usage_get: {
         parameters: {
             query?: {
