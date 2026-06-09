@@ -12,7 +12,16 @@ from src.governance.analytics import AnalyticsService
 from src.governance.dependencies import get_analytics_service, get_audit_query_service
 from src.governance.schemas import AuditEventPage, AuditFilter, UsageAnalytics
 from src.governance.service import AuditQueryService
-from src.identity.schemas import AuthContext
+from src.identity.dependencies import get_user_admin_service
+from src.identity.schemas import (
+    AuthContext,
+    ChangeRoleRequest,
+    OrganizationResponse,
+    UpdateOrganizationRequest,
+    UserPage,
+    UserResponse,
+)
+from src.identity.service import UserAdminService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -51,3 +60,64 @@ async def list_audit_events(
         end=end,
     )
     return await service.list_events(actor, filters=filters, cursor=cursor, limit=limit)
+
+
+@router.get("/users", response_model=UserPage)
+async def list_users(
+    actor: AuthContext = Depends(require_admin),
+    service: UserAdminService = Depends(get_user_admin_service),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1),
+) -> UserPage:
+    """One newest-first page of the org's users (owner/admin only)."""
+    return await service.list_users(actor, cursor=cursor, limit=limit)
+
+
+@router.post("/users/{user_id}/deactivate", response_model=UserResponse)
+async def deactivate_user(
+    user_id: UUID,
+    actor: AuthContext = Depends(require_admin),
+    service: UserAdminService = Depends(get_user_admin_service),
+) -> UserResponse:
+    """Deactivate a user — revokes their sessions immediately (audited)."""
+    return await service.set_active(actor, user_id, active=False)
+
+
+@router.post("/users/{user_id}/activate", response_model=UserResponse)
+async def activate_user(
+    user_id: UUID,
+    actor: AuthContext = Depends(require_admin),
+    service: UserAdminService = Depends(get_user_admin_service),
+) -> UserResponse:
+    """Reactivate a user (audited)."""
+    return await service.set_active(actor, user_id, active=True)
+
+
+@router.patch("/users/{user_id}/role", response_model=UserResponse)
+async def change_user_role(
+    user_id: UUID,
+    body: ChangeRoleRequest,
+    actor: AuthContext = Depends(require_admin),
+    service: UserAdminService = Depends(get_user_admin_service),
+) -> UserResponse:
+    """Change a user's role under the owner rules (only owners grant/alter owner; audited)."""
+    return await service.change_role(actor, user_id, body)
+
+
+@router.get("/organization", response_model=OrganizationResponse)
+async def get_organization(
+    actor: AuthContext = Depends(require_admin),
+    service: UserAdminService = Depends(get_user_admin_service),
+) -> OrganizationResponse:
+    """The actor's organization profile (owner/admin only)."""
+    return await service.get_organization(actor)
+
+
+@router.patch("/organization", response_model=OrganizationResponse)
+async def update_organization(
+    body: UpdateOrganizationRequest,
+    actor: AuthContext = Depends(require_admin),
+    service: UserAdminService = Depends(get_user_admin_service),
+) -> OrganizationResponse:
+    """Update the org profile (audited)."""
+    return await service.update_organization(actor, name=body.name)

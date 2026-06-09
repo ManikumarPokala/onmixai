@@ -19,20 +19,28 @@ from src.identity.repository import (
     UserRepository,
 )
 from src.identity.rules import (
+    ensure_deactivation_allowed,
     ensure_password_strong,
+    ensure_role_change_allowed,
     is_refresh_token_expired,
     is_refresh_token_reused,
 )
 from src.identity.schemas import (
     AuthContext,
+    ChangeRoleRequest,
     IssuedTokens,
     OrganizationDTO,
+    OrganizationResponse,
     RegistrationResult,
     UserDTO,
+    UserPage,
+    UserResponse,
 )
+from src.shared.audit import AuditEmitter
 from src.shared.config import Settings
 from src.shared.database import set_tenant_context
 from src.shared.errors import AuthenticationError, ConflictError, NotFoundError
+from src.shared.pagination import decode_keyset_cursor, encode_keyset_cursor
 from src.shared.security import (
     create_access_token,
     generate_refresh_token,
@@ -205,3 +213,112 @@ class OrgPolicyService:
     async def all_org_ids(self) -> list[UUID]:
         """All tenant ids (for system-level tenant enumeration, e.g. the sweeper)."""
         return await self._orgs.all_ids()
+
+
+class UserAdminService:
+    """Owner/admin user & organization administration (CLAUDE.md §3.1: 6-step methods). Every
+    mutation is audited; role/deactivation policy is enforced by pure rules; deactivation revokes
+    the user's refresh tokens so existing sessions die immediately (the Phase-1 inactive-token
+    rejection). Cross-org users are invisible — a get returns 404, never an existence oracle."""
+
+    def __init__(
+        self,
+        *,
+        users: UserRepository,
+        organizations: OrganizationRepository,
+        refresh_tokens: RefreshTokenRepository,
+        audit: AuditEmitter,
+        settings: Settings,
+    ) -> None:
+        self._users = users
+        self._orgs = organizations
+        self._refresh_tokens = refresh_tokens
+        self._audit = audit
+        self._settings = settings
+
+    async def _owned_user(self, actor: AuthContext, user_id: UUID) -> User:
+        user = await self._users.get_by_id(actor.org_id, user_id)
+        if user is None:
+            raise NotFoundError("USER_NOT_FOUND", message="User not found")
+        return user
+
+    async def list_users(self, actor: AuthContext, *, cursor: str | None, limit: int) -> UserPage:
+        """One newest-first page of the org's users. Time: O(limit). Raises INVALID_CURSOR."""
+        capped = min(limit, self._settings.admin_user_page_size)
+        before = decode_keyset_cursor(cursor) if cursor is not None else None
+        rows = await self._users.list_for_org(actor.org_id, limit=capped + 1, before=before)
+        has_more = len(rows) > capped
+        page = rows[:capped]
+        next_cursor = encode_keyset_cursor(page[-1].created_at, page[-1].id) if has_more else None
+        return UserPage(
+            users=[UserResponse.from_dto(UserDTO.from_model(u)) for u in page],
+            next_cursor=next_cursor,
+        )
+
+    async def set_active(self, actor: AuthContext, user_id: UUID, *, active: bool) -> UserResponse:
+        """Activate/deactivate a user. Deactivation enforces the owner rules and revokes the
+        user's refresh tokens (immediate session death). Audited. Time: O(1)."""
+        target = await self._owned_user(actor, user_id)
+        if not active:
+            owners = await self._users.count_active_owners(actor.org_id)
+            ensure_deactivation_allowed(
+                actor_role=actor.role, target_role=target.role, active_owner_count=owners
+            )
+            await self._refresh_tokens.revoke_all_for_user(actor.org_id, user_id, datetime.now(UTC))
+        target.is_active = active
+        self._audit.emit(
+            org_id=actor.org_id,
+            actor_id=actor.user_id,
+            action="user.deactivated" if not active else "user.activated",
+            resource_type="user",
+            resource_id=user_id,
+        )
+        return UserResponse.from_dto(UserDTO.from_model(target))
+
+    async def change_role(
+        self, actor: AuthContext, user_id: UUID, body: ChangeRoleRequest
+    ) -> UserResponse:
+        """Change a user's role under the owner rules (only owners grant/alter owner; keep ≥1
+        owner). Audited with before/after. Time: O(1)."""
+        target = await self._owned_user(actor, user_id)
+        owners = await self._users.count_active_owners(actor.org_id)
+        previous = target.role
+        ensure_role_change_allowed(
+            actor_role=actor.role,
+            target_role=previous,
+            new_role=body.role,
+            active_owner_count=owners,
+        )
+        target.role = body.role
+        self._audit.emit(
+            org_id=actor.org_id,
+            actor_id=actor.user_id,
+            action="user.role_changed",
+            resource_type="user",
+            resource_id=user_id,
+            from_role=previous.value,
+            to_role=body.role.value,
+        )
+        return UserResponse.from_dto(UserDTO.from_model(target))
+
+    async def get_organization(self, actor: AuthContext) -> OrganizationResponse:
+        """The actor's organization profile. Time: O(1)."""
+        org = await self._orgs.get_by_id(actor.org_id)
+        if org is None:
+            raise NotFoundError("ORGANIZATION_NOT_FOUND")
+        return OrganizationResponse.from_dto(OrganizationDTO.from_model(org))
+
+    async def update_organization(self, actor: AuthContext, *, name: str) -> OrganizationResponse:
+        """Update the org profile (name). Audited. Time: O(1)."""
+        org = await self._orgs.get_by_id(actor.org_id)
+        if org is None:
+            raise NotFoundError("ORGANIZATION_NOT_FOUND")
+        org.name = name
+        self._audit.emit(
+            org_id=actor.org_id,
+            actor_id=actor.user_id,
+            action="organization.updated",
+            resource_type="organization",
+            resource_id=org.id,
+        )
+        return OrganizationResponse.from_dto(OrganizationDTO.from_model(org))

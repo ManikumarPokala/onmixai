@@ -14,6 +14,7 @@ export const ERROR_CODES = [
   'ORGANIZATION_NOT_FOUND',
   'ORG_SLUG_TAKEN',
   'WEAK_PASSWORD',
+  'USER_NOT_FOUND',
   'FORBIDDEN',
   // shared
   'RATE_LIMITED',
@@ -64,6 +65,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   ORGANIZATION_NOT_FOUND: 'We could not find that organization.',
   ORG_SLUG_TAKEN: 'That organization slug is already taken. Please choose another.',
   WEAK_PASSWORD: 'Password must be at least 12 characters.',
+  USER_NOT_FOUND: 'That user could not be found.',
   FORBIDDEN: 'You do not have permission to do that.',
   RATE_LIMITED: 'You are going a little fast — please wait a moment and try again.',
   VALIDATION_ERROR: 'Some of the information provided was invalid.',

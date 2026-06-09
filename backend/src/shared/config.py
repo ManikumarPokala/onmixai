@@ -193,6 +193,7 @@ class Settings(BaseSettings):
 
     # --- governance / admin (Phase 6) ---
     admin_audit_page_size: int = 50  # hard server-side cap on an admin audit-log page
+    admin_user_page_size: int = 50  # hard server-side cap on an admin user-list page
 
     @field_validator("jwt_secret")
     @classmethod

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.identity.models import Organization, Role, User
 from src.shared.errors import AuthorizationError
@@ -167,3 +167,16 @@ class TokenResponse(BaseModel):
             token_type=tokens.token_type,
             expires_in=tokens.expires_in,
         )
+
+
+class UserPage(BaseModel):
+    users: list[UserResponse]
+    next_cursor: str | None
+
+
+class ChangeRoleRequest(BaseModel):
+    role: Role
+
+
+class UpdateOrganizationRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)

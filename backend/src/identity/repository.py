@@ -9,10 +9,10 @@ org scoping sits alongside Postgres RLS as defense in depth.
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, literal, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.identity.models import Organization, RefreshToken, User
+from src.identity.models import Organization, RefreshToken, Role, User
 
 
 class OrganizationRepository:
@@ -57,6 +57,26 @@ class UserRepository:
     async def get_by_id(self, org_id: UUID, user_id: UUID) -> User | None:
         stmt = select(User).where(User.org_id == org_id, User.id == user_id)
         return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def list_for_org(
+        self, org_id: UUID, *, limit: int, before: tuple[datetime, UUID] | None
+    ) -> list[User]:
+        """One newest-first page of an org's users via a (created_at, id) keyset cursor.
+        Time: O(limit)."""
+        stmt = select(User).where(User.org_id == org_id)
+        if before is not None:
+            stmt = stmt.where(
+                tuple_(User.created_at, User.id) < tuple_(literal(before[0]), literal(before[1]))
+            )
+        stmt = stmt.order_by(User.created_at.desc(), User.id.desc()).limit(limit)
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def count_active_owners(self, org_id: UUID) -> int:
+        """Active owners in an org — guards the last-owner invariant. Time: O(1) on org_id."""
+        stmt = select(func.count(User.id)).where(
+            User.org_id == org_id, User.role == Role.OWNER, User.is_active.is_(True)
+        )
+        return int((await self._session.execute(stmt)).scalar_one())
 
 
 class RefreshTokenRepository:
