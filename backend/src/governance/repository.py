@@ -1,11 +1,12 @@
-"""Governance read queries over the (shared) audit store. Org-scoped + filtered + keyset
-paginated; the (org_id, created_at) / (org_id, action, created_at) / (org_id, resource_type,
-resource_id) indexes (migration 0009) serve every predicate. No business decisions here."""
+"""Governance read queries. The audit query is keyset-paginated over the (shared) audit store;
+the analytics aggregates are a cross-cutting read model over existing tables via raw SQL — so
+governance does not import another domain's ORM models (CLAUDE.md §3.3) — and are index-backed,
+never full scans (plan-asserted). No business decisions here."""
 
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import literal, select, tuple_
+from sqlalchemy import literal, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.governance.schemas import AuditFilter
@@ -47,3 +48,71 @@ class AuditEventQueryRepository:
         stmt = stmt.order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc()).limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+
+class AnalyticsRepository:
+    """Org-scoped usage aggregates as a read model (raw SQL — no cross-domain model imports).
+    Every query is index-backed (plan-asserted): token_usage_events (org+feature+created_at /
+    org+created_at), audit_events (org+action+created_at / org+created_at), documents
+    (org+collection+status). RLS scopes each table to the actor's org; the org_id predicate is
+    defense in depth."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def tokens_by_feature(
+        self, org_id: UUID, start: datetime, end: datetime
+    ) -> dict[str, int]:
+        """Sum of tokens per feature in [start, end)."""
+        rows = await self._session.execute(
+            text(
+                "SELECT feature, COALESCE(SUM(total_tokens), 0) AS total "
+                "FROM token_usage_events "
+                "WHERE org_id = :org AND created_at >= :start AND created_at < :end "
+                "GROUP BY feature"
+            ),
+            {"org": org_id, "start": start, "end": end},
+        )
+        return {str(feature): int(total) for feature, total in rows.all()}
+
+    async def document_stats(self, org_id: UUID) -> tuple[int, int]:
+        """(count, total storage bytes) of the org's live (non-superseded) documents."""
+        count, storage = (
+            await self._session.execute(
+                text(
+                    "SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM documents "
+                    "WHERE org_id = :org AND superseded = false"
+                ),
+                {"org": org_id},
+            )
+        ).one()
+        return int(count), int(storage)
+
+    async def action_count(self, org_id: UUID, action: str, start: datetime, end: datetime) -> int:
+        """Count of an audit action in [start, end)."""
+        return int(
+            (
+                await self._session.execute(
+                    text(
+                        "SELECT COUNT(*) FROM audit_events "
+                        "WHERE org_id = :org AND action = :action "
+                        "AND created_at >= :start AND created_at < :end"
+                    ),
+                    {"org": org_id, "action": action, "start": start, "end": end},
+                )
+            ).scalar_one()
+        )
+
+    async def active_user_count(self, org_id: UUID, start: datetime, end: datetime) -> int:
+        """Distinct actors who did anything in [start, end)."""
+        return int(
+            (
+                await self._session.execute(
+                    text(
+                        "SELECT COUNT(DISTINCT actor_user_id) FROM audit_events "
+                        "WHERE org_id = :org AND created_at >= :start AND created_at < :end"
+                    ),
+                    {"org": org_id, "start": start, "end": end},
+                )
+            ).scalar_one()
+        )

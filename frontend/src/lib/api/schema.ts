@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/admin/analytics/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Usage Analytics
+         * @description Org-scoped usage over [start, end) (defaults to the last 30 days); owner/admin only.
+         */
+        get: operations["usage_analytics_api_v1_admin_analytics_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/audit": {
         parameters: {
             query?: never;
@@ -1155,6 +1175,37 @@ export interface components {
             document_id: string;
             status: components["schemas"]["DocumentStatus"];
         };
+        /**
+         * UsageAnalytics
+         * @description Org-scoped usage over a window [start, end). Token figures are windowed; document/storage
+         *     figures are current (live, non-superseded).
+         */
+        UsageAnalytics: {
+            /** Active Users */
+            active_users: number;
+            /** Document Count */
+            document_count: number;
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /** Search Count */
+            search_count: number;
+            /**
+             * Start
+             * Format: date-time
+             */
+            start: string;
+            /** Storage Bytes */
+            storage_bytes: number;
+            /** Tokens By Feature */
+            tokens_by_feature: {
+                [key: string]: number;
+            };
+            /** Tokens Total */
+            tokens_total: number;
+        };
         /** UserResponse */
         UserResponse: {
             /**
@@ -1202,6 +1253,38 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    usage_analytics_api_v1_admin_analytics_usage_get: {
+        parameters: {
+            query?: {
+                start?: string | null;
+                end?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageAnalytics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_audit_events_api_v1_admin_audit_get: {
         parameters: {
             query?: {

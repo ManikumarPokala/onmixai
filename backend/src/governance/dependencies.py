@@ -3,7 +3,8 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.governance.repository import AuditEventQueryRepository
+from src.governance.analytics import AnalyticsService
+from src.governance.repository import AnalyticsRepository, AuditEventQueryRepository
 from src.governance.service import AuditQueryService
 from src.shared.audit import AuditEmitter, get_audit_emitter
 from src.shared.config import Settings, get_settings
@@ -18,3 +19,9 @@ def get_audit_query_service(
     return AuditQueryService(
         repository=AuditEventQueryRepository(session), audit=audit, settings=settings
     )
+
+
+def get_analytics_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> AnalyticsService:
+    return AnalyticsService(repository=AnalyticsRepository(session))

@@ -51,3 +51,17 @@ class AuditEventResponse(BaseModel):
 class AuditEventPage(BaseModel):
     events: list[AuditEventResponse]
     next_cursor: str | None
+
+
+class UsageAnalytics(BaseModel):
+    """Org-scoped usage over a window [start, end). Token figures are windowed; document/storage
+    figures are current (live, non-superseded)."""
+
+    start: datetime
+    end: datetime
+    tokens_total: int
+    tokens_by_feature: dict[str, int]
+    document_count: int
+    storage_bytes: int
+    search_count: int
+    active_users: int

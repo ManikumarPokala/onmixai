@@ -8,12 +8,24 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from src.admin.dependencies import require_admin
-from src.governance.dependencies import get_audit_query_service
-from src.governance.schemas import AuditEventPage, AuditFilter
+from src.governance.analytics import AnalyticsService
+from src.governance.dependencies import get_analytics_service, get_audit_query_service
+from src.governance.schemas import AuditEventPage, AuditFilter, UsageAnalytics
 from src.governance.service import AuditQueryService
 from src.identity.schemas import AuthContext
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.get("/analytics/usage", response_model=UsageAnalytics)
+async def usage_analytics(
+    actor: AuthContext = Depends(require_admin),
+    service: AnalyticsService = Depends(get_analytics_service),
+    start: datetime | None = Query(default=None),
+    end: datetime | None = Query(default=None),
+) -> UsageAnalytics:
+    """Org-scoped usage over [start, end) (defaults to the last 30 days); owner/admin only."""
+    return await service.usage(actor, start=start, end=end)
 
 
 @router.get("/audit", response_model=AuditEventPage)

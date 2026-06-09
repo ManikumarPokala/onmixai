@@ -1631,6 +1631,60 @@
         "title": "UploadAccepted",
         "type": "object"
       },
+      "UsageAnalytics": {
+        "description": "Org-scoped usage over a window [start, end). Token figures are windowed; document/storage\nfigures are current (live, non-superseded).",
+        "properties": {
+          "active_users": {
+            "title": "Active Users",
+            "type": "integer"
+          },
+          "document_count": {
+            "title": "Document Count",
+            "type": "integer"
+          },
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "search_count": {
+            "title": "Search Count",
+            "type": "integer"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          },
+          "storage_bytes": {
+            "title": "Storage Bytes",
+            "type": "integer"
+          },
+          "tokens_by_feature": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Tokens By Feature",
+            "type": "object"
+          },
+          "tokens_total": {
+            "title": "Tokens Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "tokens_total",
+          "tokens_by_feature",
+          "document_count",
+          "storage_bytes",
+          "search_count",
+          "active_users"
+        ],
+        "title": "UsageAnalytics",
+        "type": "object"
+      },
       "UserResponse": {
         "properties": {
           "created_at": {
@@ -1730,6 +1784,79 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/analytics/usage": {
+      "get": {
+        "description": "Org-scoped usage over [start, end) (defaults to the last 30 days); owner/admin only.",
+        "operationId": "usage_analytics_api_v1_admin_analytics_usage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageAnalytics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Usage Analytics",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/api/v1/admin/audit": {
       "get": {
         "description": "One org-scoped, filtered, newest-first page of the audit log (owner/admin only).",
