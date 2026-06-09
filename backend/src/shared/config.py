@@ -195,6 +195,14 @@ class Settings(BaseSettings):
     admin_audit_page_size: int = 50  # hard server-side cap on an admin audit-log page
     admin_user_page_size: int = 50  # hard server-side cap on an admin user-list page
     admin_document_page_size: int = 50  # hard server-side cap on an admin document-list page
+    # Retention purge (Task 7). The purge job deletes from the immutable audit store, which the
+    # runtime role is REVOKEd from (migration 0009) — so it connects as a dedicated least-privilege
+    # purger role via its own URL (ADR 0019), never the runtime role. Absent → audit purge is
+    # impossible and the job fails fast rather than silently skipping. Dry-run is ON by default so
+    # the first deploy reports candidates without deleting anything.
+    purge_database_url: PostgresDsn | None = None
+    retention_dry_run: bool = True
+    retention_batch_size: int = 500  # rows deleted per committed batch (bounded, crash-resumable)
 
     @field_validator("jwt_secret")
     @classmethod
@@ -361,3 +369,28 @@ def get_runtime_db_role() -> str:
     if not role:
         raise RuntimeError("DATABASE_URL has no role/username; cannot scope audit_events grants")
     return role
+
+
+class _PurgeRoleSettings(BaseSettings):
+    """Reads only PURGE_DATABASE_URL so migration 0010 can name the purger role without building
+    the full Settings (mirrors _RuntimeRoleSettings). Optional — absent means no purge role."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
+    )
+
+    purge_database_url: PostgresDsn | None = None
+
+
+@lru_cache
+def get_purge_db_role() -> str | None:
+    """The dedicated least-privilege purger DB role — the username in PURGE_DATABASE_URL, or None
+    when unset. Migration 0010 GRANTs it DELETE on audit_events + the conversation tables (ADR
+    0019) so retention deletion runs as this role, never the runtime role (whose audit DELETE
+    stays REVOKEd). None → the grants are skipped; the purge job then has no audit-delete rights."""
+    from sqlalchemy.engine import make_url
+
+    url = _PurgeRoleSettings().purge_database_url
+    if url is None:
+        return None
+    return make_url(str(url)).username

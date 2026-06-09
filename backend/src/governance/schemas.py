@@ -25,7 +25,7 @@ class AuditEventResponse(BaseModel):
     """One audit row for the admin viewer. ``metadata`` is non-sensitive by construction."""
 
     id: UUID
-    actor_user_id: UUID
+    actor_user_id: UUID | None
     action: str
     resource_type: str | None
     resource_id: UUID | None
@@ -93,3 +93,12 @@ class SetRetentionPolicyRequest(BaseModel):
 
     audit_retention_days: int | None = Field(default=None, ge=1)
     conversation_retention_days: int | None = Field(default=None, ge=1)
+
+
+class PurgeReport(BaseModel):
+    """Per-org outcome of one retention purge run (one entry per org with a policy)."""
+
+    org_id: UUID
+    audit_deleted: int
+    conversation_deleted: int
+    dry_run: bool

@@ -796,11 +796,8 @@ export interface components {
         AuditEventResponse: {
             /** Action */
             action: string;
-            /**
-             * Actor User Id
-             * Format: uuid
-             */
-            actor_user_id: string;
+            /** Actor User Id */
+            actor_user_id: string | null;
             /**
              * Created At
              * Format: date-time

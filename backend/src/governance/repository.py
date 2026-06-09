@@ -4,9 +4,10 @@ governance does not import another domain's ORM models (CLAUDE.md §3.3) — and
 never full scans (plan-asserted). No business decisions here."""
 
 from datetime import datetime
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import literal, select, text, tuple_
+from sqlalchemy import CursorResult, literal, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.governance.models import RetentionPolicy
@@ -150,3 +151,69 @@ class RetentionPolicyRepository:
         policy.updated_by = updated_by
         await self._session.flush()
         return policy
+
+
+# The only tables the purge may touch — an allowlist so the table name can be interpolated into
+# raw SQL safely (it never comes from user input). audit_events is purged via the privileged
+# purger connection; chat_sessions purges conversation data (children cascade).
+_PURGEABLE_TABLES = frozenset({"audit_events", "chat_sessions"})
+
+
+class RetentionPurgeRepository:
+    """Bounded, org-scoped retention deletes over the purgeable tables. Runs on a PRIVILEGED
+    (purger-role) session — the runtime role is REVOKEd from deleting audit_events (migration
+    0009). Every statement carries an explicit org_id predicate (defense in depth alongside RLS,
+    CLAUDE.md §4). Raw SQL with an allowlisted table name (no ORM cross-domain import, §3.3)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    @staticmethod
+    def _checked(table: str) -> str:
+        if table not in _PURGEABLE_TABLES:
+            raise ValueError(f"table not purgeable: {table}")
+        return table
+
+    async def all_org_ids(self) -> list[UUID]:
+        """Every org id (the tenant root ``organizations`` is not RLS-scoped, so this needs no
+        tenant context — the purge enumerates orgs, then sets context per org). Time: O(orgs)."""
+        result = await self._session.execute(text("SELECT id FROM organizations ORDER BY id"))
+        return [row[0] for row in result.all()]
+
+    async def count_expired(self, table: str, org_id: UUID, cutoff: datetime) -> int:
+        """Rows in ``table`` for the org older than ``cutoff``. Time: O(matching) index scan."""
+        t = self._checked(table)
+        result = await self._session.execute(
+            text(f"SELECT count(*) FROM {t} WHERE org_id = :org AND created_at < :cutoff"),
+            {"org": str(org_id), "cutoff": cutoff},
+        )
+        return int(result.scalar_one())
+
+    async def expired_id_batch(
+        self, table: str, org_id: UUID, cutoff: datetime, limit: int
+    ) -> list[UUID]:
+        """The oldest ``limit`` expired ids (keyset order). Selecting before deleting lets the
+        audit record name exactly what is about to be deleted. Time: O(limit)."""
+        t = self._checked(table)
+        result = await self._session.execute(
+            text(
+                f"SELECT id FROM {t} WHERE org_id = :org AND created_at < :cutoff "
+                "ORDER BY created_at, id LIMIT :limit"
+            ),
+            {"org": str(org_id), "cutoff": cutoff, "limit": limit},
+        )
+        return [row[0] for row in result.all()]
+
+    async def delete_ids(self, table: str, org_id: UUID, ids: list[UUID]) -> int:
+        """Delete the given rows (org-scoped). Returns the rowcount. Time: O(len(ids))."""
+        t = self._checked(table)
+        if not ids:
+            return 0
+        result = cast(
+            "CursorResult[Any]",
+            await self._session.execute(
+                text(f"DELETE FROM {t} WHERE org_id = :org AND id = ANY(:ids)"),
+                {"org": str(org_id), "ids": [str(i) for i in ids]},
+            ),
+        )
+        return result.rowcount

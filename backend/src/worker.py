@@ -10,7 +10,7 @@ from typing import Any
 
 from arq import cron
 from arq.connections import RedisSettings
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.ai.adapters.litellm_gateway import LiteLLMGateway
 from src.ai.adapters.openai_embedder import OpenAIEmbedder
@@ -19,6 +19,7 @@ from src.ai.gateway import LLMGateway
 from src.ai.repository import ModelConfigRepository
 from src.conversation import models as _conversation_models  # noqa: F401 - register tables
 from src.conversation.worker import summarize_session
+from src.governance.worker import purge_expired_data
 from src.identity import models as _identity_models  # noqa: F401 - register identity tables
 from src.identity.repository import OrganizationRepository
 from src.identity.service import OrgPolicyService
@@ -74,12 +75,23 @@ def _make_retriever(session: AsyncSession) -> SearchService:
     )
 
 
+def _make_purge_sessionmaker() -> async_sessionmaker[AsyncSession] | None:
+    """The privileged purger sessionmaker (PURGE_DATABASE_URL), or None when unconfigured. This is
+    the ONLY connection authorized to delete audit_events (ADR 0019) — never the runtime engine."""
+    purge_url = get_settings().purge_database_url
+    if purge_url is None:
+        return None
+    engine = create_async_engine(str(purge_url), pool_pre_ping=True)
+    return async_sessionmaker(engine, expire_on_commit=False)
+
+
 async def _on_startup(ctx: dict[str, Any]) -> None:
     await ingest_startup(ctx)
     ctx["tenant_lister_factory"] = _make_tenant_lister
     ctx["embedder"] = OpenAIEmbedder(ctx["settings"])
     ctx["gateway_factory"] = _make_gateway
     ctx["retriever_factory"] = _make_retriever
+    ctx["purge_sessionmaker"] = _make_purge_sessionmaker()
 
 
 class WorkerSettings:
@@ -94,6 +106,8 @@ class WorkerSettings:
         cron(sweep_storage_outbox, minute=set(range(0, 60, 5)), run_at_startup=False),
         cron(sweep_stuck_reports, minute=set(range(0, 60, 5)), run_at_startup=False),
         cron(sweep_stuck_exports, minute=set(range(0, 60, 5)), run_at_startup=False),
+        # Retention purge once daily at 03:00 UTC (off-peak); dry-run by config default.
+        cron(purge_expired_data, hour={3}, minute={0}, run_at_startup=False),
     ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     on_startup = _on_startup

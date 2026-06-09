@@ -57,9 +57,16 @@
             "type": "string"
           },
           "actor_user_id": {
-            "format": "uuid",
-            "title": "Actor User Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor User Id"
           },
           "created_at": {
             "format": "date-time",
