@@ -36,7 +36,7 @@ from src.reports import models as _reports_models  # noqa: F401 - register repor
 from src.reports.export_worker import export_report_pdf, sweep_stuck_exports
 from src.reports.worker import generate_report, sweep_stuck_reports
 from src.search.service import SearchService
-from src.shared.audit import get_audit_emitter
+from src.shared.audit import AuditEmitter, AuditEventRepository
 from src.shared.config import get_settings
 
 
@@ -55,7 +55,10 @@ def _make_gateway(session: AsyncSession) -> LLMGateway:
         breaker=get_circuit_breaker(),
     )
     return build_metered_traced_gateway(
-        inner=adapter, session=session, audit=get_audit_emitter(), tracer=get_tracer()
+        inner=adapter,
+        session=session,
+        audit=AuditEmitter(AuditEventRepository(session)),
+        tracer=get_tracer(),
     )
 
 
@@ -66,7 +69,7 @@ def _make_retriever(session: AsyncSession) -> SearchService:
     return SearchService(
         reader=ChunkRetrievalService(ChunkRepository(session), settings),
         embedder=OpenAIEmbedder(settings),
-        audit=get_audit_emitter(),
+        audit=AuditEmitter(AuditEventRepository(session)),
         settings=settings,
     )
 

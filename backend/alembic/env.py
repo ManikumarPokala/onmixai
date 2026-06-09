@@ -18,10 +18,12 @@ from alembic import context
 # Import the metadata and every model module so all tables register on Base.
 from src.ai import models as ai_models  # noqa: F401
 from src.conversation import models as conversation_models  # noqa: F401
+from src.governance import models as governance_models  # noqa: F401
 from src.identity import models  # noqa: F401
 from src.knowledge import models as knowledge_models  # noqa: F401
 from src.recommendation import models as recommendation_models  # noqa: F401
 from src.reports import models as reports_models  # noqa: F401
+from src.shared import audit as shared_audit  # noqa: F401  (AuditEvent registers on Base)
 from src.shared.database import Base
 
 config = context.config

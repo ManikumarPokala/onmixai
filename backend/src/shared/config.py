@@ -332,3 +332,27 @@ def get_index_params() -> IndexParams:
         hnsw_ef_construction=settings.search_hnsw_ef_construction,
         fts_language=settings.search_fts_language,
     )
+
+
+class _RuntimeRoleSettings(BaseSettings):
+    """Reads only DATABASE_URL so migration 0009 can name the runtime role without
+    constructing the full Settings (mirrors _DimensionSettings)."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
+    )
+
+    database_url: PostgresDsn
+
+
+@lru_cache
+def get_runtime_db_role() -> str:
+    """The non-superuser runtime DB role — the username in DATABASE_URL. Migration 0009 REVOKEs
+    UPDATE/DELETE on audit_events from it so the application can only INSERT + SELECT audit rows
+    (immutability at the grant level; retention deletion runs as the owner, Task 7)."""
+    from sqlalchemy.engine import make_url
+
+    role = make_url(str(_RuntimeRoleSettings().database_url)).username
+    if not role:
+        raise RuntimeError("DATABASE_URL has no role/username; cannot scope audit_events grants")
+    return role
