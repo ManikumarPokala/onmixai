@@ -83,8 +83,8 @@ async def test_usage_aggregates(
     await db_session.flush()
 
     resp = await admin_harness.client.get(
-        f"/api/v1/admin/analytics/usage?start={_WINDOW.isoformat()}"
-        f"&end={(_WINDOW + timedelta(days=1)).isoformat()}",
+        "/api/v1/admin/analytics/usage",
+        params={"start": _WINDOW.isoformat(), "end": (_WINDOW + timedelta(days=1)).isoformat()},
         headers=auth(org.tokens[Role.ADMIN]),
     )
     assert resp.status_code == 200
@@ -119,8 +119,8 @@ async def test_org_scoped(
     await db_session.flush()
 
     resp = await admin_harness.client.get(
-        f"/api/v1/admin/analytics/usage?start={_WINDOW.isoformat()}"
-        f"&end={(_WINDOW + timedelta(days=1)).isoformat()}",
+        "/api/v1/admin/analytics/usage",
+        params={"start": _WINDOW.isoformat(), "end": (_WINDOW + timedelta(days=1)).isoformat()},
         headers=auth(org_a.tokens[Role.OWNER]),
     )
     assert resp.json()["tokens_total"] == 0  # org A sees none of org B's usage
