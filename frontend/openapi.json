@@ -164,6 +164,37 @@
         "title": "Body_upload_document_api_v1_collections__collection_id__documents_post",
         "type": "object"
       },
+      "BudgetPeriod": {
+        "description": "The window a token budget applies over.",
+        "enum": [
+          "monthly"
+        ],
+        "title": "BudgetPeriod",
+        "type": "string"
+      },
+      "BudgetResponse": {
+        "description": "The org's budget for a period.",
+        "properties": {
+          "limit_tokens": {
+            "title": "Limit Tokens",
+            "type": "integer"
+          },
+          "period": {
+            "$ref": "#/components/schemas/BudgetPeriod"
+          },
+          "soft_threshold_pct": {
+            "title": "Soft Threshold Pct",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "period",
+          "limit_tokens",
+          "soft_threshold_pct"
+        ],
+        "title": "BudgetResponse",
+        "type": "object"
+      },
       "ChangeRoleRequest": {
         "properties": {
           "role": {
@@ -826,6 +857,40 @@
           "created_at"
         ],
         "title": "MessageResponse",
+        "type": "object"
+      },
+      "ModelConfigResponse": {
+        "description": "The org's effective model config. When no row exists yet the admin surface returns the\nplatform defaults from Settings (``ModelConfig`` row absent \u2192 Settings, see models.py).",
+        "properties": {
+          "default_model": {
+            "title": "Default Model",
+            "type": "string"
+          },
+          "fallback_chain": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fallback Chain",
+            "type": "array"
+          },
+          "temperature_default": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Default"
+          }
+        },
+        "required": [
+          "default_model",
+          "fallback_chain",
+          "temperature_default"
+        ],
+        "title": "ModelConfigResponse",
         "type": "object"
       },
       "OrganizationResponse": {
@@ -1529,6 +1594,64 @@
         "title": "SessionResponse",
         "type": "object"
       },
+      "SetBudgetRequest": {
+        "description": "Set the org's monthly token budget. ``limit_tokens`` 0 freezes spend (the next metered\ncall is blocked); ``soft_threshold_pct`` is the warn-at percentage.",
+        "properties": {
+          "limit_tokens": {
+            "minimum": 0.0,
+            "title": "Limit Tokens",
+            "type": "integer"
+          },
+          "soft_threshold_pct": {
+            "default": 80,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Soft Threshold Pct",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "limit_tokens"
+        ],
+        "title": "SetBudgetRequest",
+        "type": "object"
+      },
+      "SetModelConfigRequest": {
+        "description": "Replace the org's LLM routing config. Validated by ai.rules.ensure_valid_model_config\n(known providers, non-empty fallback chain) before it is written.",
+        "properties": {
+          "default_model": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Default Model",
+            "type": "string"
+          },
+          "fallback_chain": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fallback Chain",
+            "type": "array"
+          },
+          "temperature_default": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Default"
+          }
+        },
+        "required": [
+          "default_model"
+        ],
+        "title": "SetModelConfigRequest",
+        "type": "object"
+      },
       "SourceAttribution": {
         "properties": {
           "collection_id": {
@@ -1839,6 +1962,125 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/ai/budget": {
+      "put": {
+        "description": "Set the org's monthly token budget (audited). Effective on the next metered call.",
+        "operationId": "set_budget_api_v1_admin_ai_budget_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetBudgetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Budget",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/ai/model-config": {
+      "get": {
+        "description": "The org's LLM routing config \u2014 its row, or platform defaults when unset (owner/admin).",
+        "operationId": "get_model_config_api_v1_admin_ai_model_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Model Config",
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "description": "Replace the org's model config (audited). 422 on a bad model ref or empty fallback chain.",
+        "operationId": "set_model_config_api_v1_admin_ai_model_config_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetModelConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Model Config",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/api/v1/admin/analytics/usage": {
       "get": {
         "description": "Org-scoped usage over [start, end) (defaults to the last 30 days); owner/admin only.",

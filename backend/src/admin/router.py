@@ -8,6 +8,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from src.admin.dependencies import require_admin
+from src.ai.config_schemas import (
+    BudgetResponse,
+    ModelConfigResponse,
+    SetBudgetRequest,
+    SetModelConfigRequest,
+)
+from src.ai.config_service import AIConfigService
+from src.ai.dependencies import get_ai_config_service
 from src.governance.analytics import AnalyticsService
 from src.governance.dependencies import get_analytics_service, get_audit_query_service
 from src.governance.schemas import AuditEventPage, AuditFilter, UsageAnalytics
@@ -121,3 +129,32 @@ async def update_organization(
 ) -> OrganizationResponse:
     """Update the org profile (audited)."""
     return await service.update_organization(actor, name=body.name)
+
+
+@router.get("/ai/model-config", response_model=ModelConfigResponse)
+async def get_model_config(
+    actor: AuthContext = Depends(require_admin),
+    service: AIConfigService = Depends(get_ai_config_service),
+) -> ModelConfigResponse:
+    """The org's LLM routing config — its row, or platform defaults when unset (owner/admin)."""
+    return await service.get_model_config(actor.org_id)
+
+
+@router.put("/ai/model-config", response_model=ModelConfigResponse)
+async def set_model_config(
+    body: SetModelConfigRequest,
+    actor: AuthContext = Depends(require_admin),
+    service: AIConfigService = Depends(get_ai_config_service),
+) -> ModelConfigResponse:
+    """Replace the org's model config (audited). 422 on a bad model ref or empty fallback chain."""
+    return await service.set_model_config(org_id=actor.org_id, actor_id=actor.user_id, body=body)
+
+
+@router.put("/ai/budget", response_model=BudgetResponse)
+async def set_budget(
+    body: SetBudgetRequest,
+    actor: AuthContext = Depends(require_admin),
+    service: AIConfigService = Depends(get_ai_config_service),
+) -> BudgetResponse:
+    """Set the org's monthly token budget (audited). Effective on the next metered call."""
+    return await service.set_budget(org_id=actor.org_id, actor_id=actor.user_id, body=body)

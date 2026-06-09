@@ -3,6 +3,7 @@ their Protocols. Provider SDKs are imported lazily (only inside adapters), so co
 doesn't use them never loads them."""
 
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,8 +13,11 @@ from src.ai.embedding import Embedder
 from src.ai.gateway import LLMGateway
 from src.ai.tracing import TracingPort
 from src.shared.audit import AuditEmitter, get_audit_emitter
-from src.shared.config import get_settings
+from src.shared.config import Settings, get_settings
 from src.shared.database import get_db_session
+
+if TYPE_CHECKING:
+    from src.ai.config_service import AIConfigService
 
 
 @lru_cache
@@ -87,4 +91,21 @@ def get_gateway(
     )
     return build_metered_traced_gateway(
         inner=adapter, session=session, audit=audit, tracer=get_tracer()
+    )
+
+
+def get_ai_config_service(
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    audit: AuditEmitter = Depends(get_audit_emitter),
+) -> "AIConfigService":
+    """Owner/admin AI config & budget service, bound to the request session + audit emitter."""
+    from src.ai.config_service import AIConfigService
+    from src.ai.repository import ModelConfigRepository, TokenBudgetRepository
+
+    return AIConfigService(
+        model_configs=ModelConfigRepository(session),
+        budgets=TokenBudgetRepository(session),
+        audit=audit,
+        settings=settings,
     )

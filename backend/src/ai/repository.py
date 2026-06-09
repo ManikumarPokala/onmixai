@@ -33,6 +33,27 @@ class ModelConfigRepository:
         )
         return result.scalar_one_or_none()
 
+    async def upsert(
+        self,
+        org_id: UUID,
+        *,
+        default_model: str,
+        fallback_chain: list[str],
+        temperature_default: float | None,
+        updated_by: UUID,
+    ) -> ModelConfig:
+        """Create or update the org's model config (one row per org). Time: O(1)."""
+        config = await self.get(org_id)
+        if config is None:
+            config = ModelConfig(org_id=org_id)
+            self._session.add(config)
+        config.default_model = default_model
+        config.fallback_chain = fallback_chain
+        config.temperature_default = temperature_default
+        config.updated_by = updated_by
+        await self._session.flush()
+        return config
+
 
 class TokenBudgetRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -44,6 +65,19 @@ class TokenBudgetRepository:
             select(TokenBudget).where(TokenBudget.org_id == org_id, TokenBudget.period == period)
         )
         return result.scalar_one_or_none()
+
+    async def upsert(
+        self, org_id: UUID, period: BudgetPeriod, *, limit_tokens: int, soft_threshold_pct: int
+    ) -> TokenBudget:
+        """Create or update the org's budget for ``period`` (one row per org+period)."""
+        budget = await self.get(org_id, period)
+        if budget is None:
+            budget = TokenBudget(org_id=org_id, period=period)
+            self._session.add(budget)
+        budget.limit_tokens = limit_tokens
+        budget.soft_threshold_pct = soft_threshold_pct
+        await self._session.flush()
+        return budget
 
 
 class TokenUsageRepository:
