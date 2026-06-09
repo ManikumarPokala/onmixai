@@ -17,9 +17,19 @@ from src.ai.config_schemas import (
 from src.ai.config_service import AIConfigService
 from src.ai.dependencies import get_ai_config_service
 from src.governance.analytics import AnalyticsService
-from src.governance.dependencies import get_analytics_service, get_audit_query_service
-from src.governance.schemas import AuditEventPage, AuditFilter, UsageAnalytics
-from src.governance.service import AuditQueryService
+from src.governance.dependencies import (
+    get_analytics_service,
+    get_audit_query_service,
+    get_retention_policy_service,
+)
+from src.governance.schemas import (
+    AuditEventPage,
+    AuditFilter,
+    RetentionPolicyResponse,
+    SetRetentionPolicyRequest,
+    UsageAnalytics,
+)
+from src.governance.service import AuditQueryService, RetentionPolicyService
 from src.identity.dependencies import get_user_admin_service
 from src.identity.schemas import (
     AuthContext,
@@ -30,6 +40,9 @@ from src.identity.schemas import (
     UserResponse,
 )
 from src.identity.service import UserAdminService
+from src.knowledge.admin_service import KnowledgeAdminService
+from src.knowledge.dependencies import get_knowledge_admin_service
+from src.knowledge.schemas import DocumentPage, QuotaUsage
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -127,8 +140,69 @@ async def update_organization(
     actor: AuthContext = Depends(require_admin),
     service: UserAdminService = Depends(get_user_admin_service),
 ) -> OrganizationResponse:
-    """Update the org profile (audited)."""
-    return await service.update_organization(actor, name=body.name)
+    """Update the org profile and document quota (audited)."""
+    return await service.update_organization(
+        actor, name=body.name, max_documents=body.max_documents
+    )
+
+
+@router.get("/knowledge/quota", response_model=QuotaUsage)
+async def knowledge_quota(
+    actor: AuthContext = Depends(require_admin),
+    service: KnowledgeAdminService = Depends(get_knowledge_admin_service),
+) -> QuotaUsage:
+    """The org's document quota usage — used / limit / remaining (owner/admin)."""
+    return await service.quota_usage(actor)
+
+
+@router.get("/knowledge/documents", response_model=DocumentPage)
+async def list_org_documents(
+    actor: AuthContext = Depends(require_admin),
+    service: KnowledgeAdminService = Depends(get_knowledge_admin_service),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1),
+) -> DocumentPage:
+    """One newest-first page of every document in the org, across all collections (owner/admin)."""
+    return await service.list_documents(actor, cursor=cursor, limit=limit)
+
+
+@router.post("/knowledge/documents/{document_id}/reindex", status_code=202)
+async def reindex_document(
+    document_id: UUID,
+    actor: AuthContext = Depends(require_admin),
+    service: KnowledgeAdminService = Depends(get_knowledge_admin_service),
+) -> None:
+    """Force-requeue a document for an idempotent chunk/embedding rebuild (audited)."""
+    await service.reindex_document(actor, document_id)
+
+
+@router.delete("/knowledge/documents/{document_id}", status_code=204)
+async def delete_document(
+    document_id: UUID,
+    actor: AuthContext = Depends(require_admin),
+    service: KnowledgeAdminService = Depends(get_knowledge_admin_service),
+) -> None:
+    """Delete any document in the org and compensate its storage object (audited)."""
+    await service.delete_document(actor, document_id)
+
+
+@router.get("/retention-policy", response_model=RetentionPolicyResponse)
+async def get_retention_policy(
+    actor: AuthContext = Depends(require_admin),
+    service: RetentionPolicyService = Depends(get_retention_policy_service),
+) -> RetentionPolicyResponse:
+    """The org's data-retention policy, or retain-by-default when unset (owner/admin)."""
+    return await service.get_policy(actor)
+
+
+@router.put("/retention-policy", response_model=RetentionPolicyResponse)
+async def set_retention_policy(
+    body: SetRetentionPolicyRequest,
+    actor: AuthContext = Depends(require_admin),
+    service: RetentionPolicyService = Depends(get_retention_policy_service),
+) -> RetentionPolicyResponse:
+    """Set the org's retention windows (audited). Null/omitted means retain-by-default."""
+    return await service.set_policy(actor, body)
 
 
 @router.get("/ai/model-config", response_model=ModelConfigResponse)

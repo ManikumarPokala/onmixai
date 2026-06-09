@@ -449,6 +449,35 @@
         "title": "CreateSessionRequest",
         "type": "object"
       },
+      "DocumentPage": {
+        "description": "One keyset page of the org's documents across all collections (admin view).",
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentResponse"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "documents",
+          "next_cursor"
+        ],
+        "title": "DocumentPage",
+        "type": "object"
+      },
       "DocumentResponse": {
         "properties": {
           "collection_id": {
@@ -905,6 +934,10 @@
             "title": "Id",
             "type": "string"
           },
+          "max_documents": {
+            "title": "Max Documents",
+            "type": "integer"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -918,6 +951,7 @@
           "id",
           "name",
           "slug",
+          "max_documents",
           "created_at"
         ],
         "title": "OrganizationResponse",
@@ -949,6 +983,30 @@
           "permission"
         ],
         "title": "PermissionGrant",
+        "type": "object"
+      },
+      "QuotaUsage": {
+        "description": "The org's document quota \u2014 how many of its ``max_documents`` slots are used.",
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "remaining": {
+            "title": "Remaining",
+            "type": "integer"
+          },
+          "used": {
+            "title": "Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "used",
+          "limit",
+          "remaining"
+        ],
+        "title": "QuotaUsage",
         "type": "object"
       },
       "RecommendationPage": {
@@ -1363,6 +1421,39 @@
         "title": "ReportType",
         "type": "string"
       },
+      "RetentionPolicyResponse": {
+        "description": "The org's retention policy. Null day counts mean retain-by-default (the safe default the\nTask-7 purge job honours \u2014 null/zero/missing \u2192 zero deletions).",
+        "properties": {
+          "audit_retention_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Retention Days"
+          },
+          "conversation_retention_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Retention Days"
+          }
+        },
+        "required": [
+          "audit_retention_days",
+          "conversation_retention_days"
+        ],
+        "title": "RetentionPolicyResponse",
+        "type": "object"
+      },
       "Role": {
         "description": "Organization-scoped role assigned to a user.",
         "enum": [
@@ -1652,6 +1743,37 @@
         "title": "SetModelConfigRequest",
         "type": "object"
       },
+      "SetRetentionPolicyRequest": {
+        "description": "Set the org's retention windows. None (or omitted) means retain forever for that data\nclass; a positive day count enables time-based purging (enforced by the Task-7 job).",
+        "properties": {
+          "audit_retention_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Retention Days"
+          },
+          "conversation_retention_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Retention Days"
+          }
+        },
+        "title": "SetRetentionPolicyRequest",
+        "type": "object"
+      },
       "SourceAttribution": {
         "properties": {
           "collection_id": {
@@ -1722,6 +1844,18 @@
       },
       "UpdateOrganizationRequest": {
         "properties": {
+          "max_documents": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Documents"
+          },
           "name": {
             "maxLength": 255,
             "minLength": 1,
@@ -2320,6 +2454,188 @@
         ]
       }
     },
+    "/api/v1/admin/knowledge/documents": {
+      "get": {
+        "description": "One newest-first page of every document in the org, across all collections (owner/admin).",
+        "operationId": "list_org_documents_api_v1_admin_knowledge_documents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Org Documents",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/knowledge/documents/{document_id}": {
+      "delete": {
+        "description": "Delete any document in the org and compensate its storage object (audited).",
+        "operationId": "delete_document_api_v1_admin_knowledge_documents__document_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Document",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/knowledge/documents/{document_id}/reindex": {
+      "post": {
+        "description": "Force-requeue a document for an idempotent chunk/embedding rebuild (audited).",
+        "operationId": "reindex_document_api_v1_admin_knowledge_documents__document_id__reindex_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reindex Document",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/knowledge/quota": {
+      "get": {
+        "description": "The org's document quota usage \u2014 used / limit / remaining (owner/admin).",
+        "operationId": "knowledge_quota_api_v1_admin_knowledge_quota_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaUsage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Knowledge Quota",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/api/v1/admin/organization": {
       "get": {
         "description": "The actor's organization profile (owner/admin only).",
@@ -2347,7 +2663,7 @@
         ]
       },
       "patch": {
-        "description": "Update the org profile (audited).",
+        "description": "Update the org profile and document quota (audited).",
         "operationId": "update_organization_api_v1_admin_organization_patch",
         "requestBody": {
           "content": {
@@ -2387,6 +2703,78 @@
           }
         ],
         "summary": "Update Organization",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/retention-policy": {
+      "get": {
+        "description": "The org's data-retention policy, or retain-by-default when unset (owner/admin).",
+        "operationId": "get_retention_policy_api_v1_admin_retention_policy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionPolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Retention Policy",
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "description": "Set the org's retention windows (audited). Null/omitted means retain-by-default.",
+        "operationId": "set_retention_policy_api_v1_admin_retention_policy_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRetentionPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionPolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Retention Policy",
         "tags": [
           "admin"
         ]

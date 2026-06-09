@@ -151,3 +151,18 @@ class DocumentResponse(BaseModel):
 class UploadAccepted(BaseModel):
     document_id: UUID
     status: DocumentStatus
+
+
+class DocumentPage(BaseModel):
+    """One keyset page of the org's documents across all collections (admin view)."""
+
+    documents: list[DocumentResponse]
+    next_cursor: str | None
+
+
+class QuotaUsage(BaseModel):
+    """The org's document quota — how many of its ``max_documents`` slots are used."""
+
+    used: int
+    limit: int
+    remaining: int

@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, Select, delete, func, literal, select, text, update
+from sqlalchemy import CursorResult, Select, delete, func, literal, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -105,6 +105,21 @@ class DocumentRepository:
     async def get(self, org_id: UUID, document_id: UUID) -> Document | None:
         stmt = select(Document).where(Document.org_id == org_id, Document.id == document_id)
         return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def list_for_org(
+        self, org_id: UUID, *, limit: int, before: tuple[datetime, UUID] | None
+    ) -> list[Document]:
+        """One newest-first page of every document in the org, across all collections (the admin
+        cross-collection view — ACL is bypassed but RLS still org-scopes). Keyset on
+        (created_at, id). Time: O(limit)."""
+        stmt = select(Document).where(Document.org_id == org_id)
+        if before is not None:
+            stmt = stmt.where(
+                tuple_(Document.created_at, Document.id)
+                < tuple_(literal(before[0]), literal(before[1]))
+            )
+        stmt = stmt.order_by(Document.created_at.desc(), Document.id.desc()).limit(limit)
+        return list((await self._session.execute(stmt)).scalars().all())
 
     async def list_by_collection(
         self, org_id: UUID, collection_id: UUID, *, cursor: UUID | None = None, limit: int = 50

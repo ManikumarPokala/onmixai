@@ -4,8 +4,9 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from src.governance.models import RetentionPolicy
 from src.shared.audit import AuditEvent
 
 
@@ -65,3 +66,30 @@ class UsageAnalytics(BaseModel):
     storage_bytes: int
     search_count: int
     active_users: int
+
+
+class RetentionPolicyResponse(BaseModel):
+    """The org's retention policy. Null day counts mean retain-by-default (the safe default the
+    Task-7 purge job honours — null/zero/missing → zero deletions)."""
+
+    audit_retention_days: int | None
+    conversation_retention_days: int | None
+
+    @classmethod
+    def from_model(cls, policy: "RetentionPolicy") -> "RetentionPolicyResponse":
+        return cls(
+            audit_retention_days=policy.audit_retention_days,
+            conversation_retention_days=policy.conversation_retention_days,
+        )
+
+    @classmethod
+    def retain_by_default(cls) -> "RetentionPolicyResponse":
+        return cls(audit_retention_days=None, conversation_retention_days=None)
+
+
+class SetRetentionPolicyRequest(BaseModel):
+    """Set the org's retention windows. None (or omitted) means retain forever for that data
+    class; a positive day count enables time-based purging (enforced by the Task-7 job)."""
+
+    audit_retention_days: int | None = Field(default=None, ge=1)
+    conversation_retention_days: int | None = Field(default=None, ge=1)

@@ -308,17 +308,22 @@ class UserAdminService:
             raise NotFoundError("ORGANIZATION_NOT_FOUND")
         return OrganizationResponse.from_dto(OrganizationDTO.from_model(org))
 
-    async def update_organization(self, actor: AuthContext, *, name: str) -> OrganizationResponse:
-        """Update the org profile (name). Audited. Time: O(1)."""
+    async def update_organization(
+        self, actor: AuthContext, *, name: str, max_documents: int | None = None
+    ) -> OrganizationResponse:
+        """Update the org profile (name; document quota when given). Audited. Time: O(1)."""
         org = await self._orgs.get_by_id(actor.org_id)
         if org is None:
             raise NotFoundError("ORGANIZATION_NOT_FOUND")
         org.name = name
+        if max_documents is not None:
+            org.max_documents = max_documents
         self._audit.emit(
             org_id=actor.org_id,
             actor_id=actor.user_id,
             action="organization.updated",
             resource_type="organization",
             resource_id=org.id,
+            max_documents=org.max_documents,
         )
         return OrganizationResponse.from_dto(OrganizationDTO.from_model(org))

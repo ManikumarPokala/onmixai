@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import literal, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.governance.models import RetentionPolicy
 from src.governance.schemas import AuditFilter
 from src.shared.audit import AuditEvent
 
@@ -116,3 +117,36 @@ class AnalyticsRepository:
                 )
             ).scalar_one()
         )
+
+
+class RetentionPolicyRepository:
+    """The org's single data-retention policy row (read + upsert). Tenant-scoped by RLS."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self, org_id: UUID) -> RetentionPolicy | None:
+        """The org's retention policy, or None when unset (retain-by-default). Time: O(1)."""
+        result = await self._session.execute(
+            select(RetentionPolicy).where(RetentionPolicy.org_id == org_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def upsert(
+        self,
+        org_id: UUID,
+        *,
+        audit_retention_days: int | None,
+        conversation_retention_days: int | None,
+        updated_by: UUID,
+    ) -> RetentionPolicy:
+        """Create or update the org's retention policy (one row per org). Time: O(1)."""
+        policy = await self.get(org_id)
+        if policy is None:
+            policy = RetentionPolicy(org_id=org_id)
+            self._session.add(policy)
+        policy.audit_retention_days = audit_retention_days
+        policy.conversation_retention_days = conversation_retention_days
+        policy.updated_by = updated_by
+        await self._session.flush()
+        return policy

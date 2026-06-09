@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.identity.dependencies import get_org_policy_service, get_tenant_session
 from src.identity.service import OrgPolicyService
+from src.knowledge.admin_service import KnowledgeAdminService
 from src.knowledge.repository import (
     ChunkRepository,
     CollectionRepository,
@@ -48,3 +49,25 @@ def get_chunk_retrieval_service(
     """Knowledge's retrieval interface — the search domain injects this as its
     ChunkCandidateReader port, so search never touches knowledge's repository."""
     return ChunkRetrievalService(ChunkRepository(session), settings)
+
+
+def get_knowledge_admin_service(
+    session: AsyncSession = Depends(get_tenant_session),
+    settings: Settings = Depends(get_settings),
+    storage: ObjectStorage = Depends(get_object_storage),
+    queue: JobQueue = Depends(get_job_queue),
+    audit: AuditEmitter = Depends(get_audit_emitter),
+    org_policy: OrgPolicyService = Depends(get_org_policy_service),
+) -> KnowledgeAdminService:
+    """Owner/admin knowledge administration (cross-collection, ACL-bypassing, audited)."""
+    quota_reader: OrgQuotaReader = org_policy
+    return KnowledgeAdminService(
+        session=session,
+        documents=DocumentRepository(session),
+        outbox=StorageOutboxRepository(session),
+        storage=storage,
+        queue=queue,
+        audit=audit,
+        quota_reader=quota_reader,
+        settings=settings,
+    )

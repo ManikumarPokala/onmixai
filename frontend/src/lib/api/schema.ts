@@ -88,6 +88,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/knowledge/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Org Documents
+         * @description One newest-first page of every document in the org, across all collections (owner/admin).
+         */
+        get: operations["list_org_documents_api_v1_admin_knowledge_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Document
+         * @description Delete any document in the org and compensate its storage object (audited).
+         */
+        delete: operations["delete_document_api_v1_admin_knowledge_documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/documents/{document_id}/reindex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reindex Document
+         * @description Force-requeue a document for an idempotent chunk/embedding rebuild (audited).
+         */
+        post: operations["reindex_document_api_v1_admin_knowledge_documents__document_id__reindex_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Knowledge Quota
+         * @description The org's document quota usage — used / limit / remaining (owner/admin).
+         */
+        get: operations["knowledge_quota_api_v1_admin_knowledge_quota_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/organization": {
         parameters: {
             query?: never;
@@ -107,9 +187,33 @@ export interface paths {
         head?: never;
         /**
          * Update Organization
-         * @description Update the org profile (audited).
+         * @description Update the org profile and document quota (audited).
          */
         patch: operations["update_organization_api_v1_admin_organization_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/retention-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Retention Policy
+         * @description The org's data-retention policy, or retain-by-default when unset (owner/admin).
+         */
+        get: operations["get_retention_policy_api_v1_admin_retention_policy_get"];
+        /**
+         * Set Retention Policy
+         * @description Set the org's retention windows (audited). Null/omitted means retain-by-default.
+         */
+        put: operations["set_retention_policy_api_v1_admin_retention_policy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/users": {
@@ -856,6 +960,16 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /**
+         * DocumentPage
+         * @description One keyset page of the org's documents across all collections (admin view).
+         */
+        DocumentPage: {
+            /** Documents */
+            documents: components["schemas"]["DocumentResponse"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
         /** DocumentResponse */
         DocumentResponse: {
             /**
@@ -1037,6 +1151,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Max Documents */
+            max_documents: number;
             /** Name */
             name: string;
             /** Slug */
@@ -1056,6 +1172,18 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /**
+         * QuotaUsage
+         * @description The org's document quota — how many of its ``max_documents`` slots are used.
+         */
+        QuotaUsage: {
+            /** Limit */
+            limit: number;
+            /** Remaining */
+            remaining: number;
+            /** Used */
+            used: number;
         };
         /** RecommendationPage */
         RecommendationPage: {
@@ -1221,6 +1349,17 @@ export interface components {
          */
         ReportType: "executive_summary" | "technical" | "recommendation";
         /**
+         * RetentionPolicyResponse
+         * @description The org's retention policy. Null day counts mean retain-by-default (the safe default the
+         *     Task-7 purge job honours — null/zero/missing → zero deletions).
+         */
+        RetentionPolicyResponse: {
+            /** Audit Retention Days */
+            audit_retention_days: number | null;
+            /** Conversation Retention Days */
+            conversation_retention_days: number | null;
+        };
+        /**
          * Role
          * @description Organization-scoped role assigned to a user.
          * @enum {string}
@@ -1338,6 +1477,17 @@ export interface components {
             /** Temperature Default */
             temperature_default?: number | null;
         };
+        /**
+         * SetRetentionPolicyRequest
+         * @description Set the org's retention windows. None (or omitted) means retain forever for that data
+         *     class; a positive day count enables time-based purging (enforced by the Task-7 job).
+         */
+        SetRetentionPolicyRequest: {
+            /** Audit Retention Days */
+            audit_retention_days?: number | null;
+            /** Conversation Retention Days */
+            conversation_retention_days?: number | null;
+        };
         /** SourceAttribution */
         SourceAttribution: {
             /**
@@ -1370,6 +1520,8 @@ export interface components {
         };
         /** UpdateOrganizationRequest */
         UpdateOrganizationRequest: {
+            /** Max Documents */
+            max_documents?: number | null;
             /** Name */
             name: string;
         };
@@ -1630,6 +1782,118 @@ export interface operations {
             };
         };
     };
+    list_org_documents_api_v1_admin_knowledge_documents_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_document_api_v1_admin_knowledge_documents__document_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reindex_document_api_v1_admin_knowledge_documents__document_id__reindex_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    knowledge_quota_api_v1_admin_knowledge_quota_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotaUsage"];
+                };
+            };
+        };
+    };
     get_organization_api_v1_admin_organization_get: {
         parameters: {
             query?: never;
@@ -1670,6 +1934,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrganizationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_retention_policy_api_v1_admin_retention_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionPolicyResponse"];
+                };
+            };
+        };
+    };
+    set_retention_policy_api_v1_admin_retention_policy_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRetentionPolicyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionPolicyResponse"];
                 };
             };
             /** @description Validation Error */

@@ -34,11 +34,18 @@ class OrganizationDTO:
     id: UUID
     name: str
     slug: str
+    max_documents: int
     created_at: datetime
 
     @classmethod
     def from_model(cls, org: Organization) -> "OrganizationDTO":
-        return cls(id=org.id, name=org.name, slug=org.slug, created_at=org.created_at)
+        return cls(
+            id=org.id,
+            name=org.name,
+            slug=org.slug,
+            max_documents=org.max_documents,
+            created_at=org.created_at,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,11 +119,18 @@ class OrganizationResponse(BaseModel):
     id: UUID
     name: str
     slug: str
+    max_documents: int
     created_at: datetime
 
     @classmethod
     def from_dto(cls, org: OrganizationDTO) -> "OrganizationResponse":
-        return cls(id=org.id, name=org.name, slug=org.slug, created_at=org.created_at)
+        return cls(
+            id=org.id,
+            name=org.name,
+            slug=org.slug,
+            max_documents=org.max_documents,
+            created_at=org.created_at,
+        )
 
 
 class UserResponse(BaseModel):
@@ -180,3 +194,5 @@ class ChangeRoleRequest(BaseModel):
 
 class UpdateOrganizationRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+    # The org's document quota; None leaves it unchanged. A positive cap only.
+    max_documents: int | None = Field(default=None, ge=1)
