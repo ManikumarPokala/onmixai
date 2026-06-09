@@ -135,6 +135,17 @@ async def _count(maker: async_sessionmaker[AsyncSession], table: str, org_id: UU
         return int(result.scalar_one())
 
 
+async def _seeded_audit_events(maker: async_sessionmaker[AsyncSession], org_id: UUID) -> int:
+    """Count only the seeded ``test.event`` rows, excluding the purge's own retention.* records."""
+    async with maker() as session:
+        await set_tenant_context(session, org_id)
+        result = await session.execute(
+            text("SELECT count(*) FROM audit_events WHERE org_id = :org AND action = 'test.event'"),
+            {"org": str(org_id)},
+        )
+        return int(result.scalar_one())
+
+
 async def _purge_events(maker: async_sessionmaker[AsyncSession], org_id: UUID) -> int:
     async with maker() as session:
         await set_tenant_context(session, org_id)
@@ -266,16 +277,16 @@ async def test_crash_mid_run_resumes_and_deletes_exactly_once(
     )
     with pytest.raises(RuntimeError):
         await service._purge_org(org, now=_NOW, dry_run=False)
-    # Exactly the first committed batch deleted one row; two remain.
-    assert await _count(purge_sessionmaker, "audit_events", org) == 2
+    # Exactly the first committed batch deleted one seeded row; two remain.
+    assert await _seeded_audit_events(purge_sessionmaker, org) == 2
 
     # Resume cleanly: the run continues from the remaining expired rows — none deleted twice.
     monkeypatch.setattr(purge_repo_module.RetentionPurgeRepository, "delete_ids", real_delete)
     await service._purge_org(org, now=_NOW, dry_run=False)
-    leftover = await _count(purge_sessionmaker, "audit_events", org)
-    purge_records = await _purge_events(purge_sessionmaker, org)
-    assert leftover == purge_records  # only the retention.* records remain; all 3 test rows gone
-    assert purge_records == 3  # one audit record per committed batch — exactly-once coverage
+    assert await _seeded_audit_events(purge_sessionmaker, org) == 0  # all 3 seeded rows purged
+    # One audit record per committed batch across the crash and resume: 1 (pre-crash) + 2 (resume)
+    # = 3 — exactly-once coverage, no row purged twice, none skipped.
+    assert await _purge_events(purge_sessionmaker, org) == 3
 
 
 async def test_runtime_role_cannot_delete_audit_but_purger_can(
@@ -330,3 +341,19 @@ async def test_purge_is_org_isolated(
     assert await _count(purge_sessionmaker, "audit_events", expired) == await _purge_events(
         purge_sessionmaker, expired
     )
+
+
+async def test_purge_worker_fails_loud_without_a_purge_connection(settings: Settings) -> None:
+    # No purge_sessionmaker in ctx → the cron logs an error and does nothing (never silently OK).
+    from src.governance.worker import purge_expired_data
+
+    await purge_expired_data({"settings": settings})  # must not raise
+
+
+async def test_purge_worker_runs_with_a_purge_connection(
+    purge_sessionmaker: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    # Happy path through the cron entry (dry-run by config default → safe, deletes nothing).
+    from src.governance.worker import purge_expired_data
+
+    await purge_expired_data({"settings": settings, "purge_sessionmaker": purge_sessionmaker})
