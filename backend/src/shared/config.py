@@ -191,6 +191,9 @@ class Settings(BaseSettings):
     report_max_attempts: int = 3  # bounded retry before a report is marked FAILED
     report_claim_timeout_seconds: int = 600  # a claim older than this is swept + requeued
 
+    # --- governance / admin (Phase 6) ---
+    admin_audit_page_size: int = 50  # hard server-side cap on an admin audit-log page
+
     @field_validator("jwt_secret")
     @classmethod
     def _jwt_secret_long_enough(cls, value: SecretStr) -> SecretStr:

@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Audit Events
+         * @description One org-scoped, filtered, newest-first page of the audit log (owner/admin only).
+         */
+        get: operations["list_audit_events_api_v1_admin_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -489,6 +509,48 @@ export interface components {
             option: string;
             /** Rationale */
             rationale: string;
+        };
+        /** AuditEventPage */
+        AuditEventPage: {
+            /** Events */
+            events: components["schemas"]["AuditEventResponse"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * AuditEventResponse
+         * @description One audit row for the admin viewer. ``metadata`` is non-sensitive by construction.
+         */
+        AuditEventResponse: {
+            /** Action */
+            action: string;
+            /**
+             * Actor User Id
+             * Format: uuid
+             */
+            actor_user_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Request Id */
+            request_id: string | null;
+            /** Resource Id */
+            resource_id: string | null;
+            /** Resource Type */
+            resource_type: string | null;
+            /** Trace Id */
+            trace_id: string | null;
         };
         /** Body_create_version_api_v1_documents__document_id__versions_post */
         Body_create_version_api_v1_documents__document_id__versions_post: {
@@ -1140,6 +1202,44 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_audit_events_api_v1_admin_audit_get: {
+        parameters: {
+            query?: {
+                actor_user_id?: string | null;
+                action?: string | null;
+                resource_type?: string | null;
+                resource_id?: string | null;
+                start?: string | null;
+                end?: string | null;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     login_api_v1_auth_login_post: {
         parameters: {
             query?: never;
