@@ -18,6 +18,7 @@ from src.shared.database import get_db_session
 
 if TYPE_CHECKING:
     from src.ai.config_service import AIConfigService
+    from src.ai.policy import ModelPolicyService
 
 
 @lru_cache
@@ -109,3 +110,13 @@ def get_ai_config_service(
         audit=audit,
         settings=settings,
     )
+
+
+def get_model_policy_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> "ModelPolicyService":
+    """Read-only model-policy service (the PII-redaction toggle) for cross-domain consumers."""
+    from src.ai.policy import ModelPolicyService
+    from src.ai.repository import ModelConfigRepository
+
+    return ModelPolicyService(ModelConfigRepository(session))

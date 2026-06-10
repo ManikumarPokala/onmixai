@@ -146,3 +146,39 @@ async def pipeline_answer(
     retriever: _FakeRetriever, fake: FakeGateway, history: list[HistoryTurn]
 ) -> PipelineOutcome:
     return await _answer(_pipeline(retriever, fake), history=history)
+
+
+def _sources_text(fake: FakeGateway) -> str:
+    """The concatenated rendered-prompt message text of the last gateway call."""
+    return "\n".join(m.content for m in fake.calls[-1].prompt.messages)
+
+
+async def test_pii_redaction_toggle_governs_grounding_sources() -> None:
+    # The same retrieved source, with redaction ON then OFF — the toggle controls only what the
+    # model sees in the prompt (Task 9). Decoupling from telemetry is proven separately (Task 10).
+    pii_item = [_item("Contact jane@acme.com or 555-123-4567 about retention.", 0.9)]
+    on = FakeGateway()
+    on.queue_completion(text="See the contact details [1].")
+    await _pipeline(_FakeRetriever(pii_item), on).answer(
+        actor=_actor(),
+        raw_query="who do I contact?",
+        history=[],
+        summary=None,
+        request_id="r",
+        redact_pii=True,
+    )
+    text_on = _sources_text(on)
+    assert "jane@acme.com" not in text_on and "[REDACTED_EMAIL]" in text_on
+
+    off = FakeGateway()
+    off.queue_completion(text="See the contact details [1].")
+    await _pipeline(_FakeRetriever(pii_item), off).answer(
+        actor=_actor(),
+        raw_query="who do I contact?",
+        history=[],
+        summary=None,
+        request_id="r",
+        redact_pii=False,
+    )
+    text_off = _sources_text(off)
+    assert "jane@acme.com" in text_off  # redaction off → raw content reaches the model

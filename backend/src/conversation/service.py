@@ -13,6 +13,7 @@ Cite-or-refuse holds in storage, not just in flight: an assistant row is either 
 """
 
 from collections.abc import AsyncGenerator
+from typing import Protocol
 from uuid import UUID, uuid4
 
 import structlog
@@ -64,6 +65,13 @@ from src.shared.config import Settings
 _logger = structlog.get_logger("conversation.service")
 
 
+class PiiPolicyReader(Protocol):
+    """The per-org PII-redaction-toggle port conversation depends on; ai's ModelPolicyService
+    satisfies it (CLAUDE.md §3.3 — conversation reads ai's policy via an interface)."""
+
+    async def pii_redaction_enabled(self, org_id: UUID) -> bool: ...
+
+
 class ChatService:
     def __init__(
         self,
@@ -73,6 +81,7 @@ class ChatService:
         feedback: MessageFeedbackRepository,
         summaries: SessionSummaryRepository,
         pipeline: GroundedAnswerPipeline,
+        pii_policy: PiiPolicyReader,
         audit: AuditEmitter,
         settings: Settings,
     ) -> None:
@@ -81,6 +90,7 @@ class ChatService:
         self._feedback = feedback
         self._summaries = summaries
         self._pipeline = pipeline
+        self._pii_policy = pii_policy
         self._audit = audit
         self._settings = settings
 
@@ -229,12 +239,14 @@ class ChatService:
 
         outcome: AnsweredTurn | Refusal | None = None
         parts: list[str] = []
+        redact_pii = await self._pii_policy.pii_redaction_enabled(actor.org_id)
         async for event in self._pipeline.answer_stream(
             actor=actor,
             raw_query=normalized,
             history=history,
             summary=summary,
             request_id=request_id,
+            redact_pii=redact_pii,
         ):
             if isinstance(event, TokenChunk):
                 parts.append(event.text)

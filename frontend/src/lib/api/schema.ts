@@ -1265,6 +1265,8 @@ export interface components {
             default_model: string;
             /** Fallback Chain */
             fallback_chain: string[];
+            /** Pii Redaction Enabled */
+            pii_redaction_enabled: boolean;
             /** Temperature Default */
             temperature_default: number | null;
         };
@@ -1637,6 +1639,11 @@ export interface components {
             default_model: string;
             /** Fallback Chain */
             fallback_chain?: string[];
+            /**
+             * Pii Redaction Enabled
+             * @default true
+             */
+            pii_redaction_enabled: boolean;
             /** Temperature Default */
             temperature_default?: number | null;
         };

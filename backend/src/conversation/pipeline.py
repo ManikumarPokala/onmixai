@@ -29,6 +29,7 @@ from src.ai.gateway import (
     UpstreamUnavailableError,
 )
 from src.ai.guardrails import InjectionFilter, Refusal
+from src.ai.guardrails.pii import PIIRedactor
 from src.ai.models import UsageFeature
 from src.ai.prompt_registry import PromptRegistry
 from src.conversation.context import HistoryTurn, assemble_context
@@ -97,12 +98,14 @@ class GroundedAnswerPipeline:
         registry: PromptRegistry,
         settings: Settings,
         injection: InjectionFilter | None = None,
+        pii: PIIRedactor | None = None,
     ) -> None:
         self._retriever = retriever
         self._gateway = gateway
         self._registry = registry
         self._settings = settings
         self._injection = injection or InjectionFilter()
+        self._pii = pii or PIIRedactor()
 
     async def answer(
         self,
@@ -112,6 +115,7 @@ class GroundedAnswerPipeline:
         history: list[HistoryTurn],
         summary: str | None,
         request_id: str,
+        redact_pii: bool = True,
     ) -> PipelineOutcome:
         """Run the pipeline (non-streaming). Time: 1 rewrite (skipped on first turn) +
         1 retrieval + 1 generation, each bounded by its own budget. Returns a content
@@ -123,6 +127,7 @@ class GroundedAnswerPipeline:
             history=history,
             summary=summary,
             request_id=request_id,
+            redact_pii=redact_pii,
         )
         if isinstance(prepared, Refusal):
             return prepared  # low-confidence — BEFORE generation, no spend
@@ -141,6 +146,7 @@ class GroundedAnswerPipeline:
         history: list[HistoryTurn],
         summary: str | None,
         request_id: str,
+        redact_pii: bool = True,
     ) -> AsyncIterator[PipelineStreamEvent]:
         """Stream the pipeline (ADR 0014): tokens are yielded live as ``TokenChunk``;
         when generation completes, grounding validation runs on the ASSEMBLED text and a
@@ -154,6 +160,7 @@ class GroundedAnswerPipeline:
             history=history,
             summary=summary,
             request_id=request_id,
+            redact_pii=redact_pii,
         )
         if isinstance(prepared, Refusal):
             yield prepared  # meta → refusal — no tokens, no spend
@@ -178,6 +185,7 @@ class GroundedAnswerPipeline:
         history: list[HistoryTurn],
         summary: str | None,
         request_id: str,
+        redact_pii: bool = True,
     ) -> _Prepared | Refusal:
         """rewrite → retrieve → confidence → assemble → render. Returns a ready-to-generate
         bundle, or a low-confidence Refusal that fires BEFORE any generation spend."""
@@ -207,6 +215,11 @@ class GroundedAnswerPipeline:
             return Refusal("INSUFFICIENT_SOURCES")  # BEFORE generation — no spend
 
         neutralized = [self._injection.neutralize(item.content) for item in items]
+        if redact_pii:
+            # Per-org PII redaction of grounding sources before they enter the prompt. Decoupled
+            # from telemetry: tracing/logging/audit record source IDs + counts, never raw content,
+            # so this toggle only governs what the MODEL sees — never what leaks to observability.
+            neutralized = [self._pii.redact(text, enabled=True).text for text in neutralized]
         assembled = assemble_context(
             history=history,
             summary=summary,

@@ -40,6 +40,7 @@ class ModelConfigRepository:
         default_model: str,
         fallback_chain: list[str],
         temperature_default: float | None,
+        pii_redaction_enabled: bool,
         updated_by: UUID,
     ) -> ModelConfig:
         """Create or update the org's model config (one row per org). Time: O(1)."""
@@ -50,6 +51,7 @@ class ModelConfigRepository:
         config.default_model = default_model
         config.fallback_chain = fallback_chain
         config.temperature_default = temperature_default
+        config.pii_redaction_enabled = pii_redaction_enabled
         config.updated_by = updated_by
         await self._session.flush()
         return config

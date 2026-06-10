@@ -62,6 +62,7 @@ class AIConfigService:
             default_model=body.default_model,
             fallback_chain=body.fallback_chain,
             temperature_default=body.temperature_default,
+            pii_redaction_enabled=body.pii_redaction_enabled,
             updated_by=actor_id,
         )
         self._audit.emit(
@@ -72,6 +73,7 @@ class AIConfigService:
             resource_id=config.id,
             default_model=config.default_model,
             fallback_chain=list(config.fallback_chain),
+            pii_redaction_enabled=config.pii_redaction_enabled,
         )
         return ModelConfigResponse.from_model(config)
 

@@ -82,6 +82,8 @@ class ModelConfig(Base):
     fallback_chain: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     # NULL → inherit the platform temperature from Settings (no magic value in the DB).
     temperature_default: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Per-org PII-redaction toggle (Task 9); the pipeline redacts grounding sources when true.
+    pii_redaction_enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     updated_by: Mapped[UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

@@ -21,7 +21,9 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.policy import ModelPolicyService
 from src.ai.prompt_registry import get_prompt_registry
+from src.ai.repository import ModelConfigRepository
 from src.conversation.exceptions import MessageNotFoundError, SessionNotFoundError
 from src.conversation.models import ChatMessage, ChatRole, ChatSession, MessageFeedback
 from src.conversation.pipeline import GroundedAnswerPipeline
@@ -72,6 +74,7 @@ def _service(session: AsyncSession, settings: Settings, gateway: FakeGateway) ->
         feedback=MessageFeedbackRepository(session),
         summaries=SessionSummaryRepository(session),
         pipeline=pipeline,
+        pii_policy=ModelPolicyService(ModelConfigRepository(session)),
         audit=AuditEmitter(),
         settings=settings,
     )

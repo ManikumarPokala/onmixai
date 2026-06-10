@@ -1037,6 +1037,10 @@
             "title": "Fallback Chain",
             "type": "array"
           },
+          "pii_redaction_enabled": {
+            "title": "Pii Redaction Enabled",
+            "type": "boolean"
+          },
           "temperature_default": {
             "anyOf": [
               {
@@ -1052,7 +1056,8 @@
         "required": [
           "default_model",
           "fallback_chain",
-          "temperature_default"
+          "temperature_default",
+          "pii_redaction_enabled"
         ],
         "title": "ModelConfigResponse",
         "type": "object"
@@ -1936,6 +1941,11 @@
             },
             "title": "Fallback Chain",
             "type": "array"
+          },
+          "pii_redaction_enabled": {
+            "default": true,
+            "title": "Pii Redaction Enabled",
+            "type": "boolean"
           },
           "temperature_default": {
             "anyOf": [

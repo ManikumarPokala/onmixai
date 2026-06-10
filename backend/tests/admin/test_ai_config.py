@@ -106,3 +106,23 @@ async def test_set_budget_is_audited(
         )
     ).scalar_one()
     assert count == 1
+
+
+async def test_pii_redaction_toggle_round_trips_and_audits(
+    admin_harness: AdminHarness, db_session: AsyncSession, settings: Settings
+) -> None:
+    org = await seed_org(db_session, settings)
+    resp = await admin_harness.client.put(
+        "/api/v1/admin/ai/model-config",
+        json={
+            "default_model": "openai/gpt-4o-mini",
+            "fallback_chain": ["anthropic/claude-3-5-sonnet-latest"],
+            "pii_redaction_enabled": False,
+        },
+        headers=auth(org.tokens[Role.OWNER]),
+    )
+    assert resp.status_code == 200 and resp.json()["pii_redaction_enabled"] is False
+    get = await admin_harness.client.get(
+        "/api/v1/admin/ai/model-config", headers=auth(org.tokens[Role.ADMIN])
+    )
+    assert get.json()["pii_redaction_enabled"] is False

@@ -14,6 +14,7 @@ class SetModelConfigRequest(BaseModel):
     default_model: str = Field(min_length=1, max_length=255)
     fallback_chain: list[str] = Field(default_factory=list)
     temperature_default: float | None = Field(default=None, ge=0.0, le=2.0)
+    pii_redaction_enabled: bool = True
 
 
 class ModelConfigResponse(BaseModel):
@@ -25,6 +26,7 @@ class ModelConfigResponse(BaseModel):
     default_model: str
     fallback_chain: list[str]
     temperature_default: float | None
+    pii_redaction_enabled: bool
 
     @classmethod
     def from_model(cls, config: ModelConfig) -> "ModelConfigResponse":
@@ -32,6 +34,7 @@ class ModelConfigResponse(BaseModel):
             default_model=config.default_model,
             fallback_chain=list(config.fallback_chain),
             temperature_default=config.temperature_default,
+            pii_redaction_enabled=config.pii_redaction_enabled,
         )
 
     @classmethod
@@ -42,6 +45,7 @@ class ModelConfigResponse(BaseModel):
             default_model=default_model,
             fallback_chain=list(fallback_chain),
             temperature_default=temperature_default,
+            pii_redaction_enabled=True,
         )
 
 

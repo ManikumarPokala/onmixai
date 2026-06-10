@@ -14,7 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.dependencies import get_gateway
 from src.ai.gateway import LLMGateway
+from src.ai.policy import ModelPolicyService
 from src.ai.prompt_registry import PromptRegistry, get_prompt_registry
+from src.ai.repository import ModelConfigRepository
 from src.conversation.pipeline import GroundedAnswerPipeline
 from src.conversation.repository import (
     ChatMessageRepository,
@@ -55,6 +57,7 @@ def get_chat_service(
         feedback=MessageFeedbackRepository(session),
         summaries=SessionSummaryRepository(session),
         pipeline=pipeline,
+        pii_policy=ModelPolicyService(ModelConfigRepository(session)),
         audit=audit,
         settings=settings,
     )
