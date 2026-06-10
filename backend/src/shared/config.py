@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     database_url: PostgresDsn
 
     jwt_secret: SecretStr
+    # Previous JWT secret, set ONLY during a rotation grace window: access tokens signed by it stay
+    # valid alongside the current secret so live sessions survive the rotation (see
+    # decode_access_token + the rotate-jwt-secret runbook). Cleared once the window closes (> TTL).
+    jwt_secret_previous: SecretStr | None = None
     jwt_algorithm: str = "HS256"
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_seconds: int = 1_209_600

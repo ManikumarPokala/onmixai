@@ -73,17 +73,34 @@ def create_access_token(*, settings: Settings, user_id: UUID, org_id: UUID, role
 def decode_access_token(token: str, *, settings: Settings) -> dict[str, Any]:
     """Verify signature + expiry (no leeway) and return the claims.
 
+    Supports a **dual-secret rotation grace window**: the token is verified against the current
+    ``jwt_secret`` first and, on a signature failure, against ``jwt_secret_previous`` when set.
+    During a rotation (previous = old, current = new) tokens signed by either secret stay valid, so
+    live sessions survive the rotation with zero 401s; once the window closes (previous cleared)
+    old-secret tokens are rejected. Expiry/claim failures never fall through to the previous secret.
+
     Raises ``jwt.PyJWTError`` subclasses on any failure; callers map these to
-    ``AuthenticationError``. Time/Space: O(1). Returns heterogeneous JWT claims
-    (hence ``Any`` values); the caller validates/narrows the fields it needs.
+    ``AuthenticationError``. Time/Space: O(1). Returns heterogeneous JWT claims (``Any`` values).
     """
-    return jwt.decode(
-        token,
-        settings.jwt_secret.get_secret_value(),
-        algorithms=[settings.jwt_algorithm],
-        leeway=0,
-        options={"require": ["exp", "iat", "sub"]},
-    )
+    try:
+        return jwt.decode(
+            token,
+            settings.jwt_secret.get_secret_value(),
+            algorithms=[settings.jwt_algorithm],
+            leeway=0,
+            options={"require": ["exp", "iat", "sub"]},
+        )
+    except jwt.InvalidSignatureError:
+        if settings.jwt_secret_previous is None:
+            raise
+        # Grace window: a token signed by the previous secret is still trusted until rotation ends.
+        return jwt.decode(
+            token,
+            settings.jwt_secret_previous.get_secret_value(),
+            algorithms=[settings.jwt_algorithm],
+            leeway=0,
+            options={"require": ["exp", "iat", "sub"]},
+        )
 
 
 def generate_refresh_token() -> str:
