@@ -35,8 +35,8 @@ DOCS: tuple[DemoDoc, ...] = (
         "reactor-r200-startup-sop.txt",
         "Reactor R-200 Startup Procedure (SOP-R200-01).\n"
         "Step 1 — Purge: inert the vessel with nitrogen at 2.5 bar for 10 minutes.\n"
-        "Step 2 — Preheat: bring the reactor jacket to 180 degrees C before introducing "
-        "feedstock.\n"
+        "Step 2 — Preheat: bring the reactor jacket temperature to 180 degrees C before "
+        "introducing feedstock.\n"
         "Step 3 — Charge: add feedstock at no more than 50 kg per minute with the agitator "
         "running.\n"
         "Step 4 — Hold: maintain 180 degrees C and monitor jacket pressure until the batch "
