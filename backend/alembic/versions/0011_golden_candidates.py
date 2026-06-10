@@ -72,9 +72,7 @@ def upgrade() -> None:
             ["decided_by"], ["users.id"], name="fk_golden_candidates_decider", ondelete="SET NULL"
         ),
     )
-    op.create_index(
-        "ix_golden_candidates_org_status", "golden_candidates", ["org_id", "status"]
-    )
+    op.create_index("ix_golden_candidates_org_status", "golden_candidates", ["org_id", "status"])
     op.create_index(
         "ix_golden_candidates_org_created", "golden_candidates", ["org_id", "created_at"]
     )
