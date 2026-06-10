@@ -16,6 +16,7 @@ from scripts.demo_corpus import (
     DOCS,
     REFUSAL_ABSENT_TERM,
     REFUSAL_QUERY,
+    DemoDoc,
 )
 from src.ai.guardrails import Refusal
 from src.ai.prompt_registry import get_prompt_registry
@@ -67,6 +68,7 @@ async def _seed_demo(
         )
     )
     chunk_to_file: dict[UUID, str] = {}
+    doc_ids: list[tuple[UUID, UUID, DemoDoc]] = []
     for doc in DOCS:
         document_id, chunk_id = uuid4(), uuid4()
         session.add(
@@ -83,6 +85,10 @@ async def _seed_demo(
                 created_by=user_id,
             )
         )
+        doc_ids.append((document_id, chunk_id, doc))
+        chunk_to_file[chunk_id] = doc.filename
+    await session.flush()  # documents exist before their chunks reference them (FK)
+    for document_id, chunk_id, doc in doc_ids:
         session.add(
             Chunk(
                 id=chunk_id,
@@ -96,7 +102,6 @@ async def _seed_demo(
                 embedding=embedder._vector(doc.content),
             )
         )
-        chunk_to_file[chunk_id] = doc.filename
     await session.flush()
     return AuthContext(user_id=user_id, org_id=org_id, role=Role.OWNER), chunk_to_file
 
