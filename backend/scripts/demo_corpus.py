@@ -46,8 +46,8 @@ DOCS: tuple[DemoDoc, ...] = (
         "coolant-leak-incident-response.txt",
         "Coolant Leak Incident Response (IRP-04).\n"
         "On detection of a cooling-water leak: isolate the affected loop, switch to the backup "
-        "chiller, and notify the shift supervisor. Do not restart the reactor until the leak is "
-        "confirmed sealed and jacket temperature is back within the documented startup range.",
+        "chiller, and notify the shift supervisor. Do not resume the affected process until the "
+        "leak is confirmed sealed and cooling flow is restored to its documented range.",
     ),
     DemoDoc(
         "pump-p101-maintenance-schedule.txt",
