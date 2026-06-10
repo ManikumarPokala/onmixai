@@ -8,7 +8,18 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, Select, delete, func, literal, select, text, tuple_, update
+from sqlalchemy import (
+    CursorResult,
+    Select,
+    delete,
+    func,
+    literal,
+    or_,
+    select,
+    text,
+    tuple_,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -193,13 +204,16 @@ class DocumentRepository:
         await self._session.execute(stmt)
 
     async def requeue(self, org_id: UUID, document_id: UUID) -> None:
-        """processing → queued (retry / sweeper recovery), clearing the claim."""
+        """processing or queued → queued (retry / sweeper recovery), clearing the claim."""
         stmt = (
             update(Document)
             .where(
                 Document.org_id == org_id,
                 Document.id == document_id,
-                Document.status == DocumentStatus.PROCESSING,
+                or_(
+                    Document.status == DocumentStatus.PROCESSING,
+                    Document.status == DocumentStatus.QUEUED,
+                ),
             )
             .values(status=DocumentStatus.QUEUED, claimed_at=None)
         )
@@ -235,11 +249,15 @@ class DocumentRepository:
         )
 
     async def list_stuck(self, org_id: UUID, claimed_before: datetime) -> list[Document]:
-        """Documents stuck in PROCESSING past the deadline (dead worker)."""
+        """Documents stuck in PROCESSING or QUEUED past the deadline
+        (dead worker / enqueue failure)."""
         stmt = select(Document).where(
             Document.org_id == org_id,
-            Document.status == DocumentStatus.PROCESSING,
-            Document.claimed_at < claimed_before,
+            or_(
+                (Document.status == DocumentStatus.PROCESSING)
+                & (Document.claimed_at < claimed_before),
+                (Document.status == DocumentStatus.QUEUED) & (Document.created_at < claimed_before),
+            ),
         )
         return list((await self._session.execute(stmt)).scalars())
 

@@ -219,3 +219,75 @@ async def test_rerun_produces_identical_content(
     second = (await _read(app_engine, org_id, report_id)).content
 
     assert first == second  # deterministic content (the hashed report body) is identical
+
+
+async def test_permanent_errors_mark_failed(app_engine: AsyncEngine, settings: Settings) -> None:
+    from src.ai.gateway import BudgetExceededError, GuardrailViolationError, UpstreamRejectedError
+
+    for exc in [
+        UpstreamRejectedError(code="POLICY_VIOLATION", message="blocked"),
+        BudgetExceededError(message="budget exceeded"),
+        GuardrailViolationError(code="GROUNDING_FAILED", message="ungrounded"),
+    ]:
+        org_id, report_id = await _seed_report(app_engine)
+        gateway = FakeGateway()
+        gateway.queue_error(exc)
+
+        await generate_report(
+            _ctx(app_engine, settings, gateway, sources=3), str(report_id), str(org_id)
+        )
+
+        report = await _read(app_engine, org_id, report_id)
+        assert report.status == ReportStatus.FAILED
+        assert report.failure_reason == exc.code
+
+
+async def test_transient_upstream_unavailable_error_does_not_mark_failed(
+    app_engine: AsyncEngine, settings: Settings
+) -> None:
+    from src.ai.gateway import UpstreamUnavailableError
+
+    org_id, report_id = await _seed_report(app_engine)
+    gateway = FakeGateway()
+    gateway.queue_error(UpstreamUnavailableError())
+
+    await generate_report(
+        _ctx(app_engine, settings, gateway, sources=3), str(report_id), str(org_id)
+    )
+
+    report = await _read(app_engine, org_id, report_id)
+    # It was claimed and marked as GENERATING, and stays GENERATING
+    assert report.status == ReportStatus.GENERATING
+    assert report.failure_reason is None
+
+
+async def test_sweeper_requeues_stale_queued_reports(
+    app_engine: AsyncEngine, settings: Settings
+) -> None:
+    org_id, report_id = await _seed_report(app_engine, status=ReportStatus.QUEUED)
+    maker = async_sessionmaker(app_engine, expire_on_commit=False)
+    stale = datetime.now(UTC) - timedelta(seconds=settings.report_claim_timeout_seconds + 60)
+
+    # Make the report created_at stale
+    async with maker() as session:
+        await set_tenant_context(session, org_id)
+        await session.execute(update(Report).where(Report.id == report_id).values(created_at=stale))
+        await session.commit()
+
+    # Stub class to track Redis enqueue
+    class FakeRedisQueue:
+        def __init__(self) -> None:
+            self.enqueued: list[tuple[str, str]] = []
+
+        async def enqueue_job(self, task_name: str, report_id_str: str, org_id_str: str) -> None:
+            self.enqueued.append((report_id_str, org_id_str))
+
+    fake_redis = FakeRedisQueue()
+    ctx = _ctx(app_engine, settings, _gateway(), sources=3)
+    ctx["redis"] = fake_redis
+
+    await sweep_stuck_reports(ctx)
+
+    report = await _read(app_engine, org_id, report_id)
+    assert report.status == ReportStatus.QUEUED
+    assert (str(report_id), str(org_id)) in fake_redis.enqueued

@@ -228,3 +228,42 @@ async def test_reprocess_yields_identical_chunk_set(
         second = await ChunkRepository(session).hashes_for_document(org_id, document_id)
 
     assert first == second and len(first) > 0
+
+
+async def test_sweeper_requeues_stale_queued_documents(
+    app_engine: AsyncEngine, settings: Settings
+) -> None:
+    org_id, document_id, key = await _seed_document(app_engine)
+    storage = FakeObjectStorage()
+    storage.objects[key] = b"content"
+    maker = async_sessionmaker(app_engine, expire_on_commit=False)
+    stale = datetime.now(UTC) - timedelta(hours=1)
+    # Force a stale QUEUED document (e.g. failed to enqueue
+    # or worker dead immediately) by changing created_at
+    async with maker() as session:
+        await set_tenant_context(session, org_id)
+        await session.execute(
+            update(Document)
+            .where(Document.id == document_id)
+            .values(status=DocumentStatus.QUEUED, created_at=stale)
+        )
+        await session.commit()
+
+    # Stub class to track Redis enqueue
+    class FakeRedisQueue:
+        def __init__(self) -> None:
+            self.enqueued: list[tuple[str, str]] = []
+
+        async def enqueue_job(self, task_name: str, doc_id: str, org_id: str) -> None:
+            self.enqueued.append((doc_id, org_id))
+
+    fake_redis = FakeRedisQueue()
+    sweep_ctx = _ctx(
+        app_engine, storage, settings.model_copy(update={"ingest_stuck_after_seconds": 0})
+    )
+    sweep_ctx["redis"] = fake_redis
+    await sweep_stuck_documents(sweep_ctx)
+
+    doc = await _status(app_engine, org_id, document_id)
+    assert doc.status == DocumentStatus.QUEUED
+    assert (str(document_id), str(org_id)) in fake_redis.enqueued

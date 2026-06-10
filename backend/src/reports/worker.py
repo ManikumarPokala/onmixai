@@ -15,6 +15,7 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from src.ai.gateway import UpstreamUnavailableError
 from src.ai.prompt_registry import get_prompt_registry
 from src.identity.models import Role
 from src.identity.schemas import AuthContext
@@ -72,13 +73,18 @@ async def generate_report(ctx: dict[str, Any], report_id_str: str, org_id_str: s
         }
         try:
             final: dict[str, Any] = await graph.ainvoke(initial)
-        except AppError as exc:
+        except UpstreamUnavailableError as exc:
             # Infrastructure failure — NOT a content decline. Leave the report GENERATING; the
             # sweeper recovers it (bounded retries, then FAILED). Nothing is marked here.
             _logger.warning(
                 "report.infra_failure", report_id=str(report_id), error=type(exc).__name__
             )
             await session.rollback()
+            return
+        except AppError as exc:
+            # Permanent failure (budget, safety rejection, guardrail block). Mark FAILED.
+            await repo.mark_failed(org_id, report_id, exc.code)
+            await session.commit()
             return
 
         if final.get("error"):

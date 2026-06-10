@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, literal, select, tuple_, update
+from sqlalchemy import CursorResult, literal, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.reports.models import ExportFormat, ExportStatus, Report, ReportExport, ReportStatus
@@ -111,14 +111,17 @@ class ReportRepository:
         return result.rowcount == 1
 
     async def requeue(self, org_id: UUID, report_id: UUID) -> bool:
-        """GENERATING → QUEUED (compare-and-set) — the sweeper recovering a dead worker's
+        """GENERATING or QUEUED → QUEUED (compare-and-set) — the sweeper recovering a dead worker's
         claim. Returns True iff it re-queued. O(1)."""
         stmt = (
             update(Report)
             .where(
                 Report.org_id == org_id,
                 Report.id == report_id,
-                Report.status == ReportStatus.GENERATING,
+                or_(
+                    Report.status == ReportStatus.GENERATING,
+                    Report.status == ReportStatus.QUEUED,
+                ),
             )
             .values(status=ReportStatus.QUEUED, claimed_at=None)
         )
@@ -126,13 +129,15 @@ class ReportRepository:
         return result.rowcount == 1
 
     async def list_stuck(self, org_id: UUID, cutoff: datetime) -> list[Report]:
-        """Reports stuck in GENERATING with a claim older than ``cutoff`` (dead worker).
+        """Reports stuck in GENERATING or QUEUED past the cutoff.
         Time: O(stuck) on ix_reports_status_claimed."""
         result = await self._session.execute(
             select(Report).where(
                 Report.org_id == org_id,
-                Report.status == ReportStatus.GENERATING,
-                Report.claimed_at < cutoff,
+                or_(
+                    (Report.status == ReportStatus.GENERATING) & (Report.claimed_at < cutoff),
+                    (Report.status == ReportStatus.QUEUED) & (Report.created_at < cutoff),
+                ),
             )
         )
         return list(result.scalars().all())
@@ -216,13 +221,16 @@ class ReportExportRepository:
         return result.rowcount == 1
 
     async def requeue(self, org_id: UUID, export_id: UUID) -> bool:
-        """GENERATING → QUEUED (compare-and-set) — sweeper recovery. O(1)."""
+        """GENERATING or QUEUED → QUEUED (compare-and-set) — sweeper recovery. O(1)."""
         stmt = (
             update(ReportExport)
             .where(
                 ReportExport.org_id == org_id,
                 ReportExport.id == export_id,
-                ReportExport.status == ExportStatus.GENERATING,
+                or_(
+                    ReportExport.status == ExportStatus.GENERATING,
+                    ReportExport.status == ExportStatus.QUEUED,
+                ),
             )
             .values(status=ExportStatus.QUEUED, claimed_at=None)
         )
@@ -230,12 +238,16 @@ class ReportExportRepository:
         return result.rowcount == 1
 
     async def list_stuck(self, org_id: UUID, cutoff: datetime) -> list[ReportExport]:
-        """Exports stuck in GENERATING with a claim older than ``cutoff``. O(stuck)."""
+        """Exports stuck in GENERATING or QUEUED with a claim older than ``cutoff``. O(stuck)."""
         result = await self._session.execute(
             select(ReportExport).where(
                 ReportExport.org_id == org_id,
-                ReportExport.status == ExportStatus.GENERATING,
-                ReportExport.claimed_at < cutoff,
+                or_(
+                    (ReportExport.status == ExportStatus.GENERATING)
+                    & (ReportExport.claimed_at < cutoff),
+                    (ReportExport.status == ExportStatus.QUEUED)
+                    & (ReportExport.created_at < cutoff),
+                ),
             )
         )
         return list(result.scalars().all())
