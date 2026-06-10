@@ -18,7 +18,7 @@ from src.ai.dependencies import build_metered_traced_gateway
 from src.ai.gateway import BudgetExceededError, GatewayContext
 from src.ai.models import BudgetPeriod, TokenBudget, TokenUsageEvent, UsageFeature
 from src.ai.tracing import CompletionTrace, TracingPort
-from src.identity.models import Organization
+from src.identity.models import Organization, Role, User
 from src.shared.audit import AuditEmitter
 from src.shared.config import Settings
 from src.shared.database import set_tenant_context
@@ -136,7 +136,9 @@ async def test_fallback_advances_along_the_azure_chain() -> None:
     import litellm
 
     # Primary azure deployment fails every attempt (retryable) → chain advances to the secondary.
-    outcomes = [litellm.APIConnectionError("azure down", "azure/dep-primary", "azure")] * 5
+    outcomes: list[Any] = [
+        litellm.APIConnectionError("azure down", "azure/dep-primary", "azure")
+    ] * 5
     outcomes.append(_resp(content="from secondary"))
     fake = _FakeAcompletion(outcomes)
     completion = await _gateway(settings, fake).complete(prompt=_prompt(), ctx=_ctx())
@@ -166,6 +168,17 @@ async def _seed_org(session: AsyncSession) -> tuple[Any, Any]:
     org_id, user_id = uuid4(), uuid4()
     await set_tenant_context(session, org_id)
     session.add(Organization(id=org_id, name="Az", slug=f"az-{org_id}"))
+    await session.flush()
+    session.add(  # the metered usage event FK-references the actor
+        User(
+            id=user_id,
+            org_id=org_id,
+            email=f"az-{user_id}@x.test",
+            password_hash="x",
+            full_name="Az",
+            role=Role.OWNER,
+        )
+    )
     await session.flush()
     return org_id, user_id
 
