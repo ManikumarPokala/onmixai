@@ -26,6 +26,12 @@ export type ReportResponse = Schemas['ReportResponse']
 export type ReportPage = Schemas['ReportPage']
 export type CreateReportRequest = Schemas['CreateReportRequest']
 export type ExportResponse = Schemas['ExportResponse']
+export type UserPage = Schemas['UserPage']
+export type UserResponse = Schemas['UserResponse']
+export type ModelConfigResponse = Schemas['ModelConfigResponse']
+export type SetModelConfigRequest = Schemas['SetModelConfigRequest']
+export type BudgetResponse = Schemas['BudgetResponse']
+export type SetBudgetRequest = Schemas['SetBudgetRequest']
 
 interface RequestOptions {
   method?: string
@@ -222,5 +228,31 @@ export class ApiClient {
       throw apiErrorFromEnvelope(response.status, body)
     }
     return response.blob()
+  }
+
+  // --- admin (owner/admin only; the server enforces require_admin on every route) ---
+
+  listUsers(cursor?: string, limit = 50): Promise<UserPage> {
+    return this.request<UserPage>('/admin/users', { query: { cursor, limit } })
+  }
+
+  deactivateUser(userId: string): Promise<UserResponse> {
+    return this.request<UserResponse>(`/admin/users/${userId}/deactivate`, { method: 'POST' })
+  }
+
+  activateUser(userId: string): Promise<UserResponse> {
+    return this.request<UserResponse>(`/admin/users/${userId}/activate`, { method: 'POST' })
+  }
+
+  getModelConfig(): Promise<ModelConfigResponse> {
+    return this.request<ModelConfigResponse>('/admin/ai/model-config')
+  }
+
+  setModelConfig(body: SetModelConfigRequest): Promise<ModelConfigResponse> {
+    return this.request<ModelConfigResponse>('/admin/ai/model-config', { method: 'PUT', body })
+  }
+
+  setBudget(body: SetBudgetRequest): Promise<BudgetResponse> {
+    return this.request<BudgetResponse>('/admin/ai/budget', { method: 'PUT', body })
   }
 }

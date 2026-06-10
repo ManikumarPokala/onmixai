@@ -3,10 +3,12 @@
 
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell, DocumentsPlaceholder } from '../components/AppShell'
+import { AdminPage } from '../features/admin/AdminPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { ChatPage } from '../features/chat/ChatPage'
 import { RecommendationsPage } from '../features/recommendations/RecommendationsPage'
 import { ReportsPage } from '../features/reports/ReportsPage'
+import { RequireAdmin } from '../lib/auth/RequireAdmin'
 import { RequireAuth } from '../lib/auth/RequireAuth'
 
 export function AppRoutes() {
@@ -26,6 +28,14 @@ export function AppRoutes() {
         <Route path="/recommendations" element={<RecommendationsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/documents" element={<DocumentsPlaceholder />} />
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <AdminPage />
+            </RequireAdmin>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/chat" replace />} />
     </Routes>

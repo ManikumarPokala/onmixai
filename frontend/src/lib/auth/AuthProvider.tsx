@@ -7,9 +7,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { apiClient } from '../api'
 import type { ApiClient } from '../api'
-import { AuthContext, type AuthContextValue, type AuthStatus } from './context'
+import { AuthContext, type AuthContextValue, type AuthStatus, type UserRole } from './context'
 
 const REFRESH_SKEW_SECONDS = 60 // refresh this long before the access token expires
+
+/** Decode the `role` claim from a JWT access token for UI gating only (never trusted for
+ * authorization — the server enforces every admin route). Returns null on any malformed token. */
+function roleFromToken(token: string): UserRole | null {
+  try {
+    const payload = token.split('.')[1]
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
+    const role = (JSON.parse(json) as { role?: string }).role
+    return role === 'owner' || role === 'admin' || role === 'member' ? role : null
+  } catch {
+    return null
+  }
+}
 
 export function AuthProvider({
   children,
@@ -20,6 +33,7 @@ export function AuthProvider({
 }) {
   const [status, setStatus] = useState<AuthStatus>('anonymous')
   const [orgSlug, setOrgSlug] = useState<string | null>(null)
+  const [role, setRole] = useState<UserRole | null>(null)
   // Mutable, non-rendering session secrets — held in refs (memory-only, never persisted).
   const session = useRef<{ refreshToken: string | null; orgSlug: string | null }>({
     refreshToken: null,
@@ -42,6 +56,7 @@ export function AuthProvider({
     client.setAccessToken(null)
     setStatus('anonymous')
     setOrgSlug(null)
+    setRole(null)
   }, [client, clearTimer])
 
   const scheduleRefresh = useCallback(
@@ -57,6 +72,7 @@ export function AuthProvider({
     (access: string, refresh: string, expiresIn: number) => {
       session.current.refreshToken = refresh
       client.setAccessToken(access)
+      setRole(roleFromToken(access))
       setStatus('authenticated')
       scheduleRefresh(expiresIn)
     },
@@ -108,8 +124,8 @@ export function AuthProvider({
   }, [client, doRefresh, clearTimer])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, orgSlug, login, logout }),
-    [status, orgSlug, login, logout],
+    () => ({ status, orgSlug, role, isAdmin: role === 'owner' || role === 'admin', login, logout }),
+    [status, orgSlug, role, login, logout],
   )
 
   return <AuthContext value={value}>{children}</AuthContext>

@@ -22,6 +22,12 @@ export type {
   ReportPage,
   CreateReportRequest,
   ExportResponse,
+  UserPage,
+  UserResponse,
+  ModelConfigResponse,
+  SetModelConfigRequest,
+  BudgetResponse,
+  SetBudgetRequest,
 } from './client'
 export { ApiError, humanMessage } from './errors'
 export type { ErrorCode } from './errors'

@@ -5,7 +5,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth/useAuth'
 
 export function AppShell() {
-  const { orgSlug, logout } = useAuth()
+  const { orgSlug, isAdmin, logout } = useAuth()
   const navigate = useNavigate()
 
   async function onLogout() {
@@ -30,6 +30,11 @@ export function AppShell() {
           <NavLink to="/documents" className={({ isActive }) => (isActive ? 'is-active' : '')}>
             Documents
           </NavLink>
+          {isAdmin && (
+            <NavLink to="/admin" className={({ isActive }) => (isActive ? 'is-active' : '')}>
+              Admin
+            </NavLink>
+          )}
         </nav>
         <div className="app-header__end">
           {orgSlug && <span className="app-org">{orgSlug}</span>}
