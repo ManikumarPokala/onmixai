@@ -145,7 +145,13 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
     anthropic_api_key: SecretStr | None = None
-    azure_api_key: SecretStr | None = None
+    # Azure OpenAI (Celanese's stack). A model ref ``azure/<logical>`` routes through litellm to
+    # the deployment named by ``azure_deployment_map[logical]`` (default: the logical name). All
+    # four must be present when any azure/* model is in use (validated below); never assumed.
+    azure_openai_endpoint: str | None = None
+    azure_openai_api_version: str | None = None
+    azure_openai_api_key: SecretStr | None = None
+    azure_deployment_map: dict[str, str] = {}
 
     # Tracing (Phase 3). `logging` is dev-complete; `langfuse` for prod. Using the
     # logging exporter in prod is a deliberate opt-in (a prod guard requires it).
@@ -253,6 +259,31 @@ class Settings(BaseSettings):
         if self.env == "prod" and self.llm_base_url and _is_local_or_stub_url(self.llm_base_url):
             raise ValueError(
                 "LLM_BASE_URL must not point at a stub/localhost endpoint when ENV=prod"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_azure_openai_when_used(self) -> "Settings":
+        """If any ``azure/*`` model is configured (default model or fallback chain), the full Azure
+        connection surface must be present — fail fast naming the FIRST missing piece rather than
+        discovering it on the first live call. Also rejects a stub/localhost Azure endpoint in prod
+        (mirrors the LLM endpoint guard). Time: O(chain). Space: O(1)."""
+        azure_models = [
+            m for m in (self.llm_default_model, *self.llm_fallback_chain) if m.startswith("azure/")
+        ]
+        if not azure_models:
+            return self
+        required = {
+            "AZURE_OPENAI_ENDPOINT": self.azure_openai_endpoint,
+            "AZURE_OPENAI_API_VERSION": self.azure_openai_api_version,
+            "AZURE_OPENAI_API_KEY": self.azure_openai_api_key,
+        }
+        for name, value in required.items():
+            if not value:
+                raise ValueError(f"{name} is required when an azure/* model is configured")
+        if self.env == "prod" and _is_local_or_stub_url(self.azure_openai_endpoint or ""):
+            raise ValueError(
+                "AZURE_OPENAI_ENDPOINT must not point at a stub/localhost endpoint when ENV=prod"
             )
         return self
 

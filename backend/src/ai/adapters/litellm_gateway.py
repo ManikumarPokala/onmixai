@@ -151,18 +151,16 @@ class LiteLLMGateway:
         if model_name is None:
             raise UpstreamUnavailableError(detail="all providers circuit-open")
 
+        effective_model, connection = self._connection_kwargs(model_name)
         kwargs: dict[str, Any] = {
-            "model": model_name,
+            "model": effective_model,
             "messages": [{"role": m.role, "content": m.content} for m in prompt.messages],
             "temperature": temperature,
             "timeout": self._settings.llm_timeout_seconds,
             "num_retries": 0,
             "stream": True,
+            **connection,
         }
-        if self._settings.llm_base_url:
-            kwargs["api_base"] = self._settings.llm_base_url
-        if self._settings.llm_api_key:
-            kwargs["api_key"] = self._settings.llm_api_key.get_secret_value()
 
         parts: list[str] = []
         try:
@@ -214,6 +212,32 @@ class LiteLLMGateway:
                 ordered.append(name)
         return ordered, temperature
 
+    def _connection_kwargs(self, model_name: str) -> tuple[str, dict[str, Any]]:
+        """Resolve a chain entry to the (effective model ref, provider connection kwargs) litellm
+        needs. ``azure/<logical>`` maps the logical name to its Azure deployment
+        (``azure_deployment_map``, default identity) and injects the Azure endpoint/key/version;
+        every other ref keeps the existing OpenAI-compatible behaviour unchanged. The logical name
+        (``model_name``) is what metering/tracing record — only the litellm call uses the
+        deployment. Settings validation guarantees the Azure fields are present. Time: O(1)."""
+        s = self._settings
+        if model_name.startswith("azure/"):
+            logical = model_name.removeprefix("azure/")
+            deployment = s.azure_deployment_map.get(logical, logical)
+            connection: dict[str, Any] = {}
+            if s.azure_openai_endpoint:
+                connection["api_base"] = s.azure_openai_endpoint
+            if s.azure_openai_api_version:
+                connection["api_version"] = s.azure_openai_api_version
+            if s.azure_openai_api_key:
+                connection["api_key"] = s.azure_openai_api_key.get_secret_value()
+            return f"azure/{deployment}", connection
+        connection = {}
+        if s.llm_base_url:
+            connection["api_base"] = s.llm_base_url
+        if s.llm_api_key:
+            connection["api_key"] = s.llm_api_key.get_secret_value()
+        return model_name, connection
+
     async def _attempt_model(
         self,
         model_name: str,
@@ -259,17 +283,15 @@ class LiteLLMGateway:
         response_schema: type[BaseModel] | None,
         trace_id: str,
     ) -> Completion:
+        effective_model, connection = self._connection_kwargs(model_name)
         kwargs: dict[str, Any] = {
-            "model": model_name,
+            "model": effective_model,
             "messages": [{"role": m.role, "content": m.content} for m in prompt.messages],
             "temperature": temperature,
             "timeout": self._settings.llm_timeout_seconds,
             "num_retries": 0,  # our retry policy is the only one
+            **connection,
         }
-        if self._settings.llm_base_url:
-            kwargs["api_base"] = self._settings.llm_base_url
-        if self._settings.llm_api_key:
-            kwargs["api_key"] = self._settings.llm_api_key.get_secret_value()
         if response_schema is not None:
             kwargs["response_format"] = {"type": "json_object"}
 
