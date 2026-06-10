@@ -45,6 +45,28 @@ client generated from the API's OpenAPI schema.
 | Frontend  | React 19, TypeScript, Vite, TanStack Query |
 | Tooling   | ruff, mypy, pytest (backend); eslint, vitest (frontend); GitHub Actions CI |
 
+## Azure OpenAI quickstart
+
+OnMixAI is **Azure-ready**: the LLM gateway routes `azure/<logical>` model refs to your Azure
+OpenAI deployment (with fallback, budgets, metering, and tracing all on the Azure path), while the
+default OpenAI-compatible path is unchanged. The app never assumes a live Azure endpoint — you
+verify against your own deployment with a one-command smoke test:
+
+```bash
+cd backend
+AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com \
+AZURE_OPENAI_API_VERSION=2024-06-01 \
+AZURE_OPENAI_API_KEY=<your-key> \
+AZURE_DEPLOYMENT_MAP='{"gpt-4o-mini": "<your-deployment-name>"}' \
+python scripts/azure_smoke.py --model azure/gpt-4o-mini
+```
+
+It sends one completion through the gateway and prints the response, the trace (model / tokens /
+latency / `trace_id`), and the usage. To run OnMixAI itself on Azure, set the same four variables in
+`backend/.env` and use an `azure/*` ref in `LLM_DEFAULT_MODEL` / `LLM_FALLBACK_CHAIN` — Settings
+fails fast at startup if any Azure variable is missing. (No live Azure call happens in CI; the
+smoke test is yours to run against your deployment.)
+
 ## Prerequisites
 
 - Docker + Docker Compose
