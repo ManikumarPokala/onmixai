@@ -68,12 +68,29 @@ drill_retention_crash(){
   echo "  → live re-run: start the purge worker, kill it mid-batch, restart; assert no row deleted twice and retention.* records preserved."
 }
 
+drill_compound_db_restart_midstream(){
+  echo "── Drill 6 (compound): DB restart WHILE a chat turn is mid-stream"
+  echo "  inject: restart postgres during an active SSE chat turn | question the isolated drills don't answer:"
+  echo "          does a fault mid-multi-step leave PARTIAL state, or degrade cleanly?"
+  echo "  expect (by design — one turn = one transaction at persist time, LLM call independent of the DB):"
+  echo "          the stream ends in a clean error event (no hang); after recovery the session holds EITHER"
+  echo "          a complete assistant message for that turn OR none — never an empty/partial row; re-send works."
+  echo "  → start a chat message (SSE) and, mid-stream, run: $COMPOSE restart postgres"
+  echo "    then query chat_messages for that session: assert no partial/empty assistant row was persisted."
+  echo "  note: the provider-outage-during-worker-batch overlap degrades cleanly by the SAME property —"
+  echo "        each batch item is its own transaction (FAILED-terminal per item, no cross-item corruption),"
+  echo "        so this one compound drill demonstrates the class without scripting a second."
+}
+
 require_stack
 drill_db_restart
 drill_provider_outage
 drill_worker_death
 drill_storage_failure
 drill_retention_crash
+drill_compound_db_restart_midstream
 echo
 echo "drills auto-checked: ${pass} passed, ${fail} failed. Steps marked '→' are manual asserts to record."
+echo "Record ACTUAL numbers in docs/runbooks/failure-drills.md: drill 1 recovery time (s), drill 2 wall-clock"
+echo "bound observed, drill 6 partial-state check — a number is the GA evidence, 'recovered' is not."
 [ "$fail" -eq 0 ]
