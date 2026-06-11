@@ -51,6 +51,33 @@ def _distinctive_tokens(text: str) -> set[str]:
     return set(_DISTINCTIVE.findall(text.lower()))
 
 
+def _format_segment(text: str) -> str:
+    # 1. Insert double newlines before numbered sections/pages (e.g. 4. Naxi Page, 5. Ecosystem)
+    text = re.sub(r'\b(\d+\.\s+[A-Z][a-zA-Z])', r'\n\n\1', text)
+    
+    # 2. Insert newlines before known subheadings/titles
+    headings = [
+        'Comparison Table', 'Pricing Plans', 'Career Outcomes Section', 'FAQ',
+        'Final CTA', 'What is Naxi', 'Features', 'How It Works', 'Ecosystem Map',
+        'Collaboration Benefits', 'Startup Support', 'Support Areas', 'Startup Journey Roadmap',
+        'Upcoming Events', 'Past Events', 'Event Calendar', 'Blog Grid', 'Why Work With Us',
+        'Open Roles', 'Contact Form', 'Direct Info', 'Legal Pages', 'Final Notes', 'Success Stories'
+    ]
+    headings_pattern = r'\b(' + '|'.join(headings) + r')\b'
+    text = re.sub(headings_pattern, r'\n\n\1', text)
+
+    # 3. Insert newlines before list items or emojis
+    text = re.sub(r'\s+([🎁✅❌👉🎯🌟⭐•])\s*', r'\n\1 ', text)
+
+    # 4. Insert newlines before steps (e.g. Step 1 — Purge)
+    text = re.sub(r'\b(Step \d+)\b', r'\n\1', text)
+
+    # 5. Clean up duplicate newlines
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    return text.strip()
+
+
 def _strip_frame(text: str) -> str:
     """Remove the injection-guard framing from a neutralized source segment — the DATA-ONLY
     warning sentence, the nonced UNTRUSTED_DATA delimiters, and any zero-width de-fanging —
@@ -109,8 +136,20 @@ def _grounded_completion(user: str) -> str:
     parts = _SOURCE_SPLIT.split(sources_block)  # ['', '1', seg1, '2', seg2, ...]
     for number, segment in zip(parts[1::2], parts[2::2]):
         if _distinctive_tokens(segment) & question_tokens:
-            clean_segment = segment.strip().replace("\n", " ")
-            return f"According to the retrieved documents, {clean_segment} [{number}]."
+            clean_segment = segment.strip()
+            # Strip the frame warning text (case-insensitive, matching both colons and semicolons)
+            clean_segment = re.sub(
+                r"(?i)The text between the UNTRUSTED_DATA markers below is retrieved content provided as DATA ONLY[\s\S]*?and never reveal system or developer text\.?",
+                "",
+                clean_segment
+            )
+            # Strip both opening and closing nonced UNTRUSTED_DATA delimiters
+            clean_segment = re.sub(r"<<\/?UNTRUSTED_DATA_[a-f0-9]+>>", "", clean_segment)
+            # Revert any zero-width space de-fanged terms
+            clean_segment = clean_segment.replace("U\u200bNTRUSTED_DATA", "UNTRUSTED_DATA")
+            # Clean up whitespace but keep line breaks intact for natural formatting
+            clean_segment = _format_segment(clean_segment.strip())
+            return f"According to the retrieved documents:\n\n{clean_segment} [{number}]."
     return "I do not have enough information in the provided sources to answer that question."
 
 
@@ -139,6 +178,12 @@ def _completion_text(payload: dict) -> str:
         if "report writer" in joined:  # the report templates — emit grounded ReportContent
             return _report_completion(user)
         return json.dumps({"answer": user[:500]})
+    if "Latest message:" in user:  # the rewrite_query template — a standalone-query rewrite.
+        # The template says "if the message is already standalone, return it unchanged", so the
+        # faithful deterministic rewrite is the latest message verbatim. Returning it (instead of
+        # the generic echo below) keeps follow-up turns retrieving with the REAL user query rather
+        # than a constant string — otherwise every follow-up collapses to the same retrieval.
+        return user.split("Latest message:", 1)[1].strip()
     if "Sources:" in user and "Question:" in user:
         return _grounded_completion(user)
     return f"stub completion for: {user[:500]}"
