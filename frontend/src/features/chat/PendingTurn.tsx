@@ -17,6 +17,11 @@ export function PendingTurnView({ turn, onRetry }: { turn: PendingTurn; onRetry:
       {turn.phase === 'refused' ? (
         <div className="bubble bubble--refusal" role="note">
           <p>{refusalCopy(turn.refusalReason ?? '')}</p>
+          {turn.text && (
+            <div className="refusal-details" style={{ marginTop: '0.5rem', opacity: 0.85 }}>
+              <MessageContent text={turn.text} citations={turn.citations} />
+            </div>
+          )}
         </div>
       ) : turn.phase === 'error' ? (
         <div className="bubble bubble--error" role="alert">

@@ -60,6 +60,7 @@ export function useChatStream(
           sessionId,
           content,
           (event) => {
+            console.log("RAG Stage 8: Frontend received payload", event)
             switch (event.event) {
               case 'token':
                 setTurn((t) => (t ? { ...t, text: t.text + event.text } : t))
@@ -70,7 +71,14 @@ export function useChatStream(
               case 'refusal':
                 // SUPERSEDE: the streamed text is replaced by the refusal (ADR 0014).
                 setTurn((t) =>
-                  t ? { ...t, phase: 'refused', refusalReason: event.reason } : t,
+                  t
+                    ? {
+                        ...t,
+                        phase: 'refused',
+                        refusalReason: event.reason,
+                        text: event.content || t.text || '',
+                      }
+                    : t,
                 )
                 break
               case 'done':

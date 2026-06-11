@@ -34,7 +34,10 @@ describe('auth flow', () => {
   it('logs in and lands on the guarded chat route', async () => {
     renderApp('/chat')
     await signIn()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /user profile menu/i }))
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: /open navigation menu/i }))
     expect(screen.getByRole('link', { name: 'Chat' })).toBeInTheDocument()
   })
 
@@ -52,6 +55,7 @@ describe('auth flow', () => {
     renderApp('/chat')
     await signIn()
     const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /user profile menu/i }))
     await user.click(await screen.findByRole('button', { name: 'Sign out' }))
     await waitFor(() => expect(screen.getByText('Sign in to OnMixAI')).toBeInTheDocument())
     expect(backend.loginCalls).toBe(1)
@@ -64,6 +68,7 @@ describe('registration flow', () => {
     const user = userEvent.setup()
     await fillRegister(user)
     await user.click(screen.getByRole('button', { name: 'Create account' }))
+    await user.click(await screen.findByRole('button', { name: /user profile menu/i }))
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeInTheDocument()
     expect(backend.registerCalls).toBe(1)
     expect(backend.loginCalls).toBe(1) // registration is followed by a sign-in

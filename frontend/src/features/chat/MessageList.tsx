@@ -24,6 +24,11 @@ export function MessageList({
         ) : message.refusal_reason ? (
           <div key={message.id} className="bubble bubble--refusal" role="note">
             <p>{refusalCopy(message.refusal_reason)}</p>
+            {message.content && (
+              <div className="refusal-details" style={{ marginTop: '0.5rem', opacity: 0.85 }}>
+                <MessageContent text={message.content} citations={message.citations} />
+              </div>
+            )}
           </div>
         ) : (
           <div key={message.id} className="bubble bubble--assistant">

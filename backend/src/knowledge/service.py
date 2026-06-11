@@ -111,6 +111,14 @@ class KnowledgeService:
         collections = await self._collections.list_readable(actor.org_id, actor.user_id)
         return [CollectionDTO.from_model(c) for c in collections]
 
+    async def list_documents(self, actor: AuthContext, collection_id: UUID) -> list[DocumentDTO]:
+        """List all non-superseded documents in a collection (requires READ permission)."""
+        if await self._collections.get(actor.org_id, collection_id) is None:
+            raise CollectionNotFoundError()
+        await self._require_permission(actor, collection_id, Permission.READ)
+        docs = await self._documents.list_by_collection(actor.org_id, collection_id)
+        return [DocumentDTO.from_model(d) for d in docs]
+
     async def grant_permission(
         self, actor: AuthContext, *, collection_id: UUID, user_id: UUID, permission: Permission
     ) -> None:

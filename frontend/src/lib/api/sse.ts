@@ -29,6 +29,7 @@ export interface DoneEvent {
 export interface RefusalEvent {
   event: 'refusal'
   reason: string
+  content?: string
 }
 export interface ChatErrorEvent {
   event: 'error'

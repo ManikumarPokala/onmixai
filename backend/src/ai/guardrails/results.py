@@ -18,6 +18,15 @@ class Refusal:
     """A typed refusal/degraded outcome (low confidence, blocked, or ungrounded)."""
 
     reason: str
+    content: str = ""
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Refusal):
+            return NotImplemented
+        return self.reason == other.reason
+
+    def __hash__(self) -> int:
+        return hash(self.reason)
 
 
 GuardedResult = GroundedResult | Refusal

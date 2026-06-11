@@ -64,10 +64,8 @@ def _grounded_completion(user: str) -> str:
     parts = _SOURCE_SPLIT.split(sources_block)  # ['', '1', seg1, '2', seg2, ...]
     for number, segment in zip(parts[1::2], parts[2::2]):
         if _distinctive_tokens(segment) & question_tokens:
-            return (
-                f"Based on the sources, the answer to “{question.strip()[:160]}” is "
-                f"supported [{number}]."
-            )
+            clean_segment = segment.strip().replace("\n", " ")
+            return f"According to the retrieved documents, {clean_segment} [{number}]."
     return "I do not have enough information in the provided sources to answer that question."
 
 

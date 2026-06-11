@@ -153,6 +153,7 @@ class DoneEvent(BaseModel):
 class RefusalEvent(BaseModel):
     event: Literal["refusal"] = "refusal"
     reason: str  # supersedes streamed tokens — the client replaces content (ADR 0014)
+    content: str = ""
 
 
 class ErrorEvent(BaseModel):

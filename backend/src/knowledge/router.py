@@ -45,6 +45,16 @@ async def list_collections(
     return [CollectionResponse.from_dto(dto) for dto in await service.list_collections(actor)]
 
 
+@router.get("/collections/{collection_id}/documents")
+async def list_documents(
+    collection_id: UUID,
+    actor: AuthContext = Depends(get_current_user),
+    service: KnowledgeService = Depends(get_knowledge_service),
+) -> list[DocumentResponse]:
+    dtos = await service.list_documents(actor, collection_id)
+    return [DocumentResponse.from_dto(d) for d in dtos]
+
+
 @router.post("/collections/{collection_id}/permissions", status_code=status.HTTP_204_NO_CONTENT)
 async def grant_permission(
     collection_id: UUID,

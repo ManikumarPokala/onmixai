@@ -235,7 +235,9 @@ class ChatService:
         summary = summary_row.summary if summary_row is not None else None
 
         assistant_id = uuid4()
-        yield MetaEvent(message_id=assistant_id, seq=assistant_seq)
+        meta_ev = MetaEvent(message_id=assistant_id, seq=assistant_seq)
+        _logger.debug("RAG Stage 7: API response event", payload=meta_ev.model_dump())
+        yield meta_ev
 
         outcome: AnsweredTurn | Refusal | None = None
         parts: list[str] = []
@@ -250,7 +252,9 @@ class ChatService:
         ):
             if isinstance(event, TokenChunk):
                 parts.append(event.text)
-                yield TokenEvent(text=event.text)
+                tok_ev = TokenEvent(text=event.text)
+                _logger.debug("RAG Stage 7: API response event", payload=tok_ev.model_dump())
+                yield tok_ev
             else:
                 outcome = event  # terminal AnsweredTurn | Refusal
         assert outcome is not None  # answer_stream always yields a terminal event last
@@ -266,14 +270,21 @@ class ChatService:
         )
 
         if isinstance(outcome, AnsweredTurn):
-            yield CitationsEvent(items=[_citation_schema(c) for c in outcome.citations])
-            yield DoneEvent(
+            cit_ev = CitationsEvent(items=[_citation_schema(c) for c in outcome.citations])
+            _logger.debug("RAG Stage 7: API response event", payload=cit_ev.model_dump())
+            yield cit_ev
+
+            done_ev = DoneEvent(
                 message_id=assistant_id,
                 prompt_version=outcome.prompt_version,
                 trace_id=outcome.trace_id,
             )
+            _logger.debug("RAG Stage 7: API response event", payload=done_ev.model_dump())
+            yield done_ev
         else:
-            yield RefusalEvent(reason=outcome.reason)
+            ref_ev = RefusalEvent(reason=outcome.reason, content=outcome.content)
+            _logger.debug("RAG Stage 7: API response event", payload=ref_ev.model_dump())
+            yield ref_ev
 
     async def _load_history(
         self, actor: AuthContext, session_id: UUID, max_seq: int | None
@@ -328,7 +339,7 @@ class ChatService:
                 org_id=actor.org_id,
                 session_id=session.id,
                 role=ChatRole.ASSISTANT,
-                content="",  # a refusal carries no answer text — only refusal_reason
+                content=outcome.content,  # preserve the generated refusal text
                 refusal_reason=outcome.reason,
                 seq=assistant_seq,
             )

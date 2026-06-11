@@ -32,6 +32,12 @@ export type ModelConfigResponse = Schemas['ModelConfigResponse']
 export type SetModelConfigRequest = Schemas['SetModelConfigRequest']
 export type BudgetResponse = Schemas['BudgetResponse']
 export type SetBudgetRequest = Schemas['SetBudgetRequest']
+export type CollectionCreate = Schemas['CollectionCreate']
+export type CollectionResponse = Schemas['CollectionResponse']
+export type DocumentResponse = Schemas['DocumentResponse']
+export type DocumentStatus = Schemas['DocumentStatus']
+export type UploadAccepted = Schemas['UploadAccepted']
+
 
 interface RequestOptions {
   method?: string
@@ -79,17 +85,20 @@ export class ApiClient {
   }
 
   private async raw(path: string, opts: RequestOptions): Promise<Response> {
+    const isFormData = opts.body instanceof FormData
     const init: RequestInit = {
       method: opts.method ?? 'GET',
-      headers: this.headers(opts.body !== undefined),
+      headers: this.headers(opts.body !== undefined && !isFormData),
       signal: opts.signal,
     }
-    if (opts.body !== undefined) init.body = JSON.stringify(opts.body)
+    if (opts.body !== undefined) {
+      init.body = isFormData ? (opts.body as FormData) : JSON.stringify(opts.body)
+    }
     let response = await fetch(this.buildUrl(path, opts.query), init)
     if (response.status === 401 && !opts.skipRefresh && this.refreshHandler) {
       const refreshed = await this.refreshHandler()
       if (refreshed) {
-        init.headers = this.headers(opts.body !== undefined)
+        init.headers = this.headers(opts.body !== undefined && !isFormData)
         response = await fetch(this.buildUrl(path, opts.query), init)
       }
     }
@@ -254,5 +263,49 @@ export class ApiClient {
 
   setBudget(body: SetBudgetRequest): Promise<BudgetResponse> {
     return this.request<BudgetResponse>('/admin/ai/budget', { method: 'PUT', body })
+  }
+
+  // --- collections & documents ---
+
+  listCollections(): Promise<CollectionResponse[]> {
+    return this.request<CollectionResponse[]>('/collections')
+  }
+
+  createCollection(body: CollectionCreate): Promise<CollectionResponse> {
+    return this.request<CollectionResponse>('/collections', { method: 'POST', body })
+  }
+
+  deleteCollection(collectionId: string): Promise<void> {
+    return this.request<void>(`/collections/${collectionId}`, { method: 'DELETE' })
+  }
+
+  listDocuments(collectionId: string): Promise<DocumentResponse[]> {
+    return this.request<DocumentResponse[]>(`/collections/${collectionId}/documents`)
+  }
+
+  uploadDocument(collectionId: string, file: File): Promise<UploadAccepted> {
+    const formData = new FormData()
+    formData.append('file', file)
+    return this.request<UploadAccepted>(`/collections/${collectionId}/documents`, {
+      method: 'POST',
+      body: formData,
+    })
+  }
+
+  uploadDocumentVersion(documentId: string, file: File): Promise<UploadAccepted> {
+    const formData = new FormData()
+    formData.append('file', file)
+    return this.request<UploadAccepted>(`/documents/${documentId}/versions`, {
+      method: 'POST',
+      body: formData,
+    })
+  }
+
+  reindexDocument(documentId: string): Promise<void> {
+    return this.request<void>(`/documents/${documentId}/reindex`, { method: 'POST' })
+  }
+
+  deleteDocument(documentId: string): Promise<void> {
+    return this.request<void>(`/documents/${documentId}`, { method: 'DELETE' })
   }
 }

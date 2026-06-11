@@ -189,6 +189,7 @@ class GroundedAnswerPipeline:
     ) -> _Prepared | Refusal:
         """rewrite → retrieve → confidence → assemble → render. Returns a ready-to-generate
         bundle, or a low-confidence Refusal that fires BEFORE any generation spend."""
+        _logger.debug("RAG Stage 1: User Query", raw_query=raw_query)
         s = self._settings
         rewritten = await rewrite_query(
             history,
@@ -205,6 +206,17 @@ class GroundedAnswerPipeline:
             actor, SearchQuery(query=rewritten.query, limit=s.search_top_k)
         )
         items = result.results
+        _logger.debug(
+            "RAG Stage 2: Retrieved Chunks",
+            chunks=[
+                {
+                    "chunk_id": str(item.chunk_id),
+                    "score": item.score,
+                    "content_snippet": item.content[:100],
+                }
+                for item in items
+            ],
+        )
         top_score = items[0].score if items else 0.0
         if not passes_confidence(
             result_count=len(items),
@@ -237,6 +249,10 @@ class GroundedAnswerPipeline:
             sources=sources_block,
             question=raw_query,
         )
+        _logger.debug(
+            "RAG Stage 3: Prompt sent to LLM",
+            prompt=[{"role": m.role, "content": m.content} for m in prompt.messages],
+        )
         ctx = GatewayContext(
             org_id=actor.org_id,
             user_id=actor.user_id,
@@ -249,11 +265,17 @@ class GroundedAnswerPipeline:
     def _finalize(self, prepared: _Prepared, text: str, completion: Completion) -> PipelineOutcome:
         """Validate grounding on the COMPLETE answer and resolve citations, or refuse.
         Shared terminal step for both the streaming and non-streaming paths."""
+        _logger.debug("RAG Stage 4: Raw LLM response", raw_response=text)
         kept = prepared.kept
         grounding = validate_grounding(
             text,
             num_sources=len(kept),
             max_phantom_fraction=self._settings.chat_max_phantom_fraction,
+        )
+        _logger.debug(
+            "RAG Stage 5: Parsed answer",
+            parsed_answer=grounding.text,
+            refusal_reason=grounding.refusal_reason,
         )
         _logger.info(
             "conversation.grounding",
@@ -262,10 +284,21 @@ class GroundedAnswerPipeline:
             phantom_markers=grounding.phantom_count,  # invention rate (citation-precision eval)
         )
         if grounding.refusal_reason is not None:
-            return Refusal(grounding.refusal_reason)
+            return Refusal(grounding.refusal_reason, content=grounding.text)
 
         citations = tuple(
             self._citation(kept[index - 1], index) for index in grounding.marker_indices
+        )
+        _logger.debug(
+            "RAG Stage 6: Generated citations",
+            citations=[
+                {
+                    "marker_index": c.marker_index,
+                    "chunk_id": str(c.chunk_id),
+                    "filename": c.filename,
+                }
+                for c in citations
+            ],
         )
         return AnsweredTurn(
             content=grounding.text,

@@ -28,6 +28,11 @@ export type {
   SetModelConfigRequest,
   BudgetResponse,
   SetBudgetRequest,
+  CollectionCreate,
+  CollectionResponse,
+  DocumentResponse,
+  DocumentStatus,
+  UploadAccepted,
 } from './client'
 export { ApiError, humanMessage } from './errors'
 export type { ErrorCode } from './errors'

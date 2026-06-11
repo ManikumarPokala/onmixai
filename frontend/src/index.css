@@ -532,11 +532,13 @@ button {
   z-index: 50;
 }
 .modal {
-  background: #fff;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1.5rem;
   max-width: 28rem;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
 }
 .modal__actions {
   display: flex;
@@ -545,8 +547,13 @@ button {
   margin-top: 1.25rem;
 }
 .btn--danger {
-  background: #b4232a;
-  color: #fff;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+.btn--danger:hover {
+  background: var(--danger);
+  color: var(--primary-text);
 }
 .admin-console {
   padding: 1.5rem;
@@ -561,10 +568,222 @@ button {
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border);
 }
 .admin-toggle {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
+
+/* --- documents & collections (Phase 5) --- */
+.documents-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  height: 100%;
+  min-height: 0;
+}
+.collection-sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.documents-pane {
+  overflow-y: auto;
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+}
+.doc-pane-header {
+  margin-bottom: 1.5rem;
+}
+.doc-pane-desc {
+  color: var(--text-dim);
+  margin: 0.25rem 0 0;
+}
+.col-create-form {
+  border-top: 1px solid var(--border);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--surface);
+}
+.col-create-form h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  text-align: center;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+  margin-bottom: 1.5rem;
+}
+.upload-zone:hover {
+  border-color: var(--primary);
+  background: var(--surface-2);
+}
+.upload-zone p {
+  margin: 0;
+  color: var(--text-dim);
+}
+.doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+.doc-table th,
+.doc-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.doc-table th {
+  font-weight: 600;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.doc-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+.doc-filename {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.doc-filename span {
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.superseded-tag {
+  font-size: 0.7rem;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+.status-badge--queued {
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+.status-badge--processing {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.status-badge--ready {
+  background: rgba(95, 208, 138, 0.1);
+  color: #5fd08a;
+  border-color: rgba(95, 208, 138, 0.3);
+}
+.status-badge--failed {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.failed-reason {
+  font-size: 0.75rem;
+  color: var(--danger);
+  margin-top: 0.25rem;
+  max-width: 200px;
+  white-space: pre-wrap;
+}
+.doc-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+.btn--small {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  border-radius: 6px;
+}
+.btn--danger-ghost {
+  color: var(--danger);
+  border-color: transparent;
+}
+.btn--danger-ghost:hover {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+}
+
+/* --- Hamburger Drawer Styles --- */
+.hamburger-btn:hover {
+  background: var(--surface-2);
+}
+.drawer-nav-item {
+  display: block;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  border-left: 3px solid transparent;
+  transition: background 0.15s, color 0.15s;
+}
+.drawer-nav-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.drawer-nav-item.is-active {
+  background: var(--surface-2);
+  color: var(--text);
+  border-left-color: var(--primary);
+  font-weight: 600;
+}
+
+/* --- Profile Dropdown Styles --- */
+.profile-trigger:hover {
+  opacity: 0.9;
+  border-color: var(--primary) !important;
+}
+.profile-dropdown button:hover {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+}
+
+/* --- Dashboard / HomePage Styles --- */
+.action-card:hover {
+  border-color: var(--primary) !important;
+  transform: translateY(-2px);
+  background: var(--surface-2) !important;
+}
+
+/* --- Engineering Hub Styles --- */
+.docs-viewer-layout {
+  border-top: 1.5px solid var(--border);
+}
+.doc-table th {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.doc-table td {
+  border-bottom: 1px solid var(--border);
+}
+

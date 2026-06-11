@@ -17,6 +17,7 @@ export function MessageContent({
   text: string
   citations: Citation[]
 }): ReactNode {
+  console.log("RAG Stage 9: Final rendered message content", { text, citations })
   const byIndex = new Map(citations.map((c) => [c.marker_index, c]))
   const parts = text.split(/(\[\d+\])/g)
   return (
