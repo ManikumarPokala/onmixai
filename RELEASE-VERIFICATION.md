@@ -1,7 +1,7 @@
 # OnMixAI v1.0.0 — Release Verification Record
 
-**Audit date:** 2026-06-10
-**Release commit:** `2283e7a0be487aadb4852e475264a6cb44b9273f` (`2283e7a`)
+**Audit date:** 2026-06-11
+**Release commit:** `d55a7d7adea361aa14da6a65cfab57942cfc0fd0` (`d55a7d7`)
 **Tag:** `v1.0.0` (annotated) — `OnMixAI V1.0.0 — GA`
 **Repository:** `ManikumarPokala/onmixai`
 
@@ -36,8 +36,8 @@ not currently available for independent verification.
 ## Release verification evidence
 
 ### 1. Release commit
-- **SHA:** `2283e7a0be487aadb4852e475264a6cb44b9273f`
-- **Subject:** `docs: V1.0.0 closure fixes, failure drills, load tests & evidence`
+- **SHA:** `d55a7d7adea361aa14da6a65cfab57942cfc0fd0`
+- **Subject:** `feat(rag): resolve citation rendering and refusal content propagation`
 
 ### 2. CI validation
 - Re-verified via the GitHub check-runs REST API against the release commit.
@@ -49,20 +49,20 @@ not currently available for independent verification.
 - **Zero non-success conclusions.**
 
 ### 3. Main-branch merge verification
-- `origin/main` = `2283e7a0be487aadb4852e475264a6cb44b9273f`.
+- `origin/main` = `d55a7d7adea361aa14da6a65cfab57942cfc0fd0`.
 - Merge was fast-forward, preserving the release SHA (no re-tag required).
 - Local `main` == `origin/main` == release commit.
 
 ### 4. Published `v1.0.0` tag verification
-- `refs/tags/v1.0.0` → tag object `1b034db604f43fa060b3fc0fdf44a9c72f00ced0`.
-- `refs/tags/v1.0.0^{}` (peeled) → `2283e7a0be487aadb4852e475264a6cb44b9273f` — **matches the release commit**.
+- `refs/tags/v1.0.0` → tag object `a6267f481bad9be94aee0b6f391c262c88a9ac5b`.
+- `refs/tags/v1.0.0^{}` (peeled) → `d55a7d7adea361aa14da6a65cfab57942cfc0fd0` — **matches the release commit**.
 - Tag type: annotated; subject: `OnMixAI V1.0.0 — GA`.
 - `git merge-base --is-ancestor v1.0.0 origin/main` → **OK** (tag is reachable from `main`, not dangling).
 
 ### 5. Clean-clone reproducibility verification
 - A fresh `git clone` of the public repository into a temporary directory succeeded.
 - `v1.0.0` tag is present in the fresh clone.
-- `git checkout v1.0.0` resolves to `HEAD = 2283e7a0be487aadb4852e475264a6cb44b9273f` — **MATCH**.
+- `git checkout v1.0.0` resolves to `HEAD = d55a7d7adea361aa14da6a65cfab57942cfc0fd0` — **MATCH**.
 - `git merge-base --is-ancestor v1.0.0 origin/main` in the clone → **OK**.
 - `git fsck --connectivity-only` → clean.
 - Release artifacts present in the clone: `CHANGELOG.md`, `DECISIONS.md`, `DEMO.md`,
@@ -78,13 +78,13 @@ not currently available for independent verification.
 | Gate | Status | Evidence |
 |---|---|---|
 | Working tree clean at release | ✅ PASS | `git status --porcelain` = 0 lines |
-| Release commit pushed to origin | ✅ PASS | `origin/main = 2283e7a` |
+| Release commit pushed to origin | ✅ PASS | `origin/main = d55a7d7` |
 | CI green on release commit | ✅ PASS | 30/30 check-runs `success` |
-| Release commit merged to main (SHA preserved) | ✅ PASS | fast-forward; `origin/main = 2283e7a` |
+| Release commit merged to main (SHA preserved) | ✅ PASS | fast-forward; `origin/main = d55a7d7` |
 | Main-branch CI green | ✅ PASS | included in the 30/30 (`push: main` event) |
-| Public `v1.0.0` tag published | ✅ PASS | `refs/tags/v1.0.0^{} → 2283e7a` |
+| Public `v1.0.0` tag published | ✅ PASS | `refs/tags/v1.0.0^{} → d55a7d7` |
 | Tag reachable from main | ✅ PASS | `merge-base --is-ancestor` → OK |
-| Clean-clone reproducibility | ✅ PASS | clone → checkout v1.0.0 → 2283e7a; fsck clean |
+| Clean-clone reproducibility | ✅ PASS | clone → checkout v1.0.0 → d55a7d7; fsck clean |
 | Third-party reproducibility | ✅ PASS | independent clone resolves to the tagged release |
 
 ---
