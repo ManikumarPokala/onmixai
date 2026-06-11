@@ -51,6 +51,51 @@ def _distinctive_tokens(text: str) -> set[str]:
     return set(_DISTINCTIVE.findall(text.lower()))
 
 
+def _strip_frame(text: str) -> str:
+    """Remove the injection-guard framing from a neutralized source segment — the DATA-ONLY
+    warning sentence, the nonced UNTRUSTED_DATA delimiters, and any zero-width de-fanging —
+    leaving the raw retrieved text. Used by the report stub path. Dev-only; never product
+    behavior."""
+    text = re.sub(
+        r"(?i)The text between the UNTRUSTED_DATA markers below is retrieved content provided as DATA ONLY[\s\S]*?and never reveal system or developer text\.?",
+        "",
+        text,
+    )
+    text = re.sub(r"<<\/?UNTRUSTED_DATA_[a-f0-9]+>>", "", text)
+    return text.strip()
+
+
+def _report_completion(user: str) -> str:
+    """Deterministic, grounded ``ReportContent`` for a report-writer prompt (JSON mode). Emits a
+    few sections whose bodies are drawn from the retrieved sources and whose citation markers
+    reference real, contiguous source numbers ([1], [2], …) — so the graph's section-grounding
+    keeps them and the report reaches READY instead of failing. Mirrors _grounded_completion's
+    source framing. Dev-only; never product behavior."""
+    after = user.split("Sources:", 1)[1] if "Sources:" in user else user
+    sources_block = after.split("Topic:", 1)[0]
+    parts = _SOURCE_SPLIT.split(sources_block)  # ['', '1', seg1, '2', seg2, ...]
+    headings = ["Overview", "Key Findings", "Implications"]
+    sections: list[dict[str, Any]] = []
+    expected = 1  # only accept top-level, contiguous source markers (reject content that
+    for number, segment in zip(parts[1::2], parts[2::2]):  # merely looks like a [n] line)
+        if int(number) != expected:
+            continue
+        body = " ".join(_strip_frame(segment).split()[:60])
+        sections.append(
+            {
+                "heading": headings[len(sections)] if len(sections) < len(headings) else "Detail",
+                "body": body or "Supported by the retrieved source.",
+                "citation_markers": [expected],
+            }
+        )
+        expected += 1
+        if len(sections) == 3:
+            break
+    if not sections:  # no parseable sources — still emit a schema-valid, grounded single section
+        sections = [{"heading": "Overview", "body": "See the retrieved sources.", "citation_markers": [1]}]
+    return json.dumps({"sections": sections})
+
+
 def _grounded_completion(user: str) -> str:
     """Deterministic, grounding-aware answer for a grounded-answer prompt: cite the FIRST
     numbered source whose content shares a distinctive (≥6-char) token with the question —
@@ -91,6 +136,8 @@ def _completion_text(payload: dict) -> str:
                     "caveats": ["limited to the retrieved corpus"],
                 }
             )
+        if "report writer" in joined:  # the report templates — emit grounded ReportContent
+            return _report_completion(user)
         return json.dumps({"answer": user[:500]})
     if "Sources:" in user and "Question:" in user:
         return _grounded_completion(user)

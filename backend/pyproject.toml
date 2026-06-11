@@ -61,6 +61,14 @@ dev = [
 where = ["."]
 include = ["src*"]
 
+[tool.setuptools.package-data]
+# The versioned prompt templates (ADR 0011) are loaded at runtime relative to
+# src/ai/prompt_registry.py (Path(__file__).parent / "prompts"). They are data files,
+# not modules, so a non-editable `pip install .` only ships them if declared here —
+# otherwise the installed package (e.g. the arq worker's import root) lacks them and
+# report/chat generation fails with FileNotFoundError on the prompts directory.
+"src.ai" = ["prompts/*/template.md", "prompts/*/meta.yaml"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
